@@ -36,6 +36,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
       { group: "Finance", items: [
         { name: 'Verify Receipts', icon: ShieldCheck, path: '/admin/verify-payments' },
         { name: 'Payment Flow', icon: CreditCard, path: '/admin/payments' },
+        { name: 'Membership Plans', icon: Trophy, path: '/admin/membership-types' },
         { name: 'Revenue Reports', icon: BarChart3, path: '/admin/reports' },
       ]}
     ],

@@ -13,7 +13,7 @@ Grounded in the schema in `DB.md` and the current state of `frontend/` and `back
 - [x] Admin: approve/reject `registration_requests` → create `users` + `members` + `memberships` + `payments` row on approval (full cascade, see `backend/API_DOCS.md`)
 
 ### Config & profiles (Modules 2–3)
-- [x] `GET /api/membership-types` (public, list only — no create/update/delete yet)
+- [x] `membership_types` CRUD (`/api/membership-types` — GET is public for the registration form, POST/PUT/DELETE are admin-only; delete is blocked with 409 if the plan is still referenced)
 - [x] `courts` — list + status toggle (`/api/courts`)
 - [x] `members` CRUD (`/api/members`, Member Directory)
 - [x] `coaches` CRUD (`/api/coaches`, Coach Profiles)
@@ -39,7 +39,7 @@ See `backend/API_DOCS.md` for the full endpoint reference.
 ## Frontend
 
 ### Routes referenced in `Sidebar`/`DashboardLayout` with no matching `<Route>` in `App.jsx` yet
-- [x] Admin: `/admin/users`, `/admin/members`, `/admin/coaches`, `/admin/guests`, `/admin/courts`, `/admin/verify-payments`, `/admin/payments`
+- [x] Admin: `/admin/users`, `/admin/members`, `/admin/coaches`, `/admin/guests`, `/admin/courts`, `/admin/verify-payments`, `/admin/payments`, `/admin/membership-types`
 - [ ] Admin: `/admin/bookings`, `/admin/schedule`, `/admin/requests`, `/admin/inquiries`, `/admin/attendance`, `/admin/reports`, `/admin/announcements`
 - [ ] Member: `/member/book`, `/member/schedule`, `/member/history`, `/member/status`, `/member/profile`, `/member/announcements`
 - [ ] Coach: `/coach/book`, `/coach/students`, `/coach/sessions`, `/coach/payments`, `/coach/announcements`

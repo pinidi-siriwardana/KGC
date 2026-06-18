@@ -143,9 +143,12 @@ row's status/reviewer/remarks. Booking creation itself isn't built yet either
 
 ## Membership Types — `/api/membership-types`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/api/membership-types` | none | `{ data: [{ membership_type_id, name, duration_months, price }] }`. Public — used by the registration form to populate the plan dropdown. No create/update/delete yet (see `TODO.md`). |
+| Method | Path | Auth | Body | Description |
+|---|---|---|---|---|
+| GET | `/api/membership-types` | none | — | `{ data: [{ membership_type_id, name, duration_months, price }] }`. Public — used by the registration form to populate the plan dropdown. |
+| POST | `/api/membership-types` | Admin | `{ name, duration_months, price }` | Creates a plan. |
+| PUT | `/api/membership-types/:id` | Admin | `{ name, duration_months, price }` | Updates a plan. |
+| DELETE | `/api/membership-types/:id` | Admin | — | Deletes a plan. Returns `409` if it's still referenced by any `registration_requests` or `memberships` row. |
 
 ---
 
