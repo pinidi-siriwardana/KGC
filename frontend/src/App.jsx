@@ -12,6 +12,13 @@ import RegisterPage from './pages/public/RegisterPage';
 import DashboardLayout from './components/layouts/DashboardLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminHome from './pages/admin/AdminHome';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminMembers from './pages/admin/AdminMembers';
+import AdminCoaches from './pages/admin/AdminCoaches';
+import AdminGuests from './pages/admin/AdminGuests';
+import AdminReciepts from './pages/admin/AdminReciepts';
+import AdminCourts from './pages/admin/AdminCourts';
+import AdminPayments from './pages/admin/AdminPayments';
 
 import MemberHome from './pages/member/MemberHome';
 
@@ -46,7 +53,13 @@ const MainContent = () => {
           <Route element={<ProtectedRoute allowedRole="admin" />}>
             <Route element={<DashboardLayout role="admin" />}>
               <Route path="/admin/dashboard" element={<AdminHome />} />
-              {/* You can add /admin/members or /admin/finance here later */}
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/members" element={<AdminMembers />} />
+              <Route path="/admin/coaches" element={<AdminCoaches />} />
+              <Route path="/admin/guests" element={<AdminGuests />} />
+              <Route path="/admin/verify-payments" element={<AdminReciepts />} />
+              <Route path="/admin/payments" element={<AdminPayments />} />
+              <Route path="/admin/courts" element={<AdminCourts />} />
             </Route>
           </Route>
 

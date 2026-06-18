@@ -25,4 +25,22 @@ pool.getConnection()
     console.error('❌ Database connection setup failed:', err.message);
   });
 
+// Runs `callback` against a single connection inside a transaction,
+// committing on success and rolling back if it throws.
+const withTransaction = async (callback) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const result = await callback(connection);
+        await connection.commit();
+        return result;
+    } catch (err) {
+        await connection.rollback();
+        throw err;
+    } finally {
+        connection.release();
+    }
+};
+
 module.exports = pool;
+module.exports.withTransaction = withTransaction;

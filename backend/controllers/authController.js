@@ -1,31 +1,63 @@
-const bcrypt = require('bcryptjs');
+const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { withTransaction } = pool;
+const { hashPassword, comparePassword } = require('../utils/password');
 
 const register = async (req, res) => {
     const { full_name, email, phone, username, password, membership_type_id } = req.body;
+    const receiptFile = req.file;
 
-    if (!full_name || !email || !phone || !username || !password) {
-        return res.status(400).json({ message: 'full_name, email, phone, username and password are required.' });
+    const fail = (status, message) => {
+        if (receiptFile) fs.unlink(receiptFile.path, () => {});
+        return res.status(status).json({ message });
+    };
+
+    if (!full_name || !email || !phone || !username || !password || !membership_type_id) {
+        return fail(400, 'full_name, email, phone, username, password and membership_type_id are required.');
     }
     if (password.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+        return fail(400, 'Password must be at least 6 characters.');
+    }
+    if (!receiptFile) {
+        return fail(400, 'A payment slip (receipt) is required.');
     }
 
     try {
-        const password_hash = await bcrypt.hash(password, 10);
-
-        const [result] = await pool.query(
-            `INSERT INTO registration_requests (full_name, email, phone, username, password_hash, membership_type_id, status)
-             VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-            [full_name, email, phone, username, password_hash, membership_type_id || null]
+        const [[membershipType]] = await pool.query(
+            'SELECT price FROM membership_types WHERE membership_type_id = ?',
+            [membership_type_id]
         );
+
+        if (!membershipType) {
+            return fail(400, 'Invalid membership_type_id.');
+        }
+
+        const password_hash = await hashPassword(password);
+        const receipt_file_url = `/uploads/slips/${receiptFile.filename}`;
+
+        const request_id = await withTransaction(async (connection) => {
+            const [requestResult] = await connection.query(
+                `INSERT INTO registration_requests (full_name, email, phone, username, password_hash, membership_type_id, status)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+                [full_name, email, phone, username, password_hash, membership_type_id]
+            );
+
+            await connection.query(
+                `INSERT INTO payment_verification (request_id, payment_type, receipt_file_url, amount_declared, status)
+                 VALUES (?, 'registration', ?, ?, 'pending')`,
+                [requestResult.insertId, receipt_file_url, membershipType.price]
+            );
+
+            return requestResult.insertId;
+        });
 
         res.status(201).json({
             message: 'Registration submitted successfully. Your account is pending admin review.',
-            request_id: result.insertId
+            request_id
         });
     } catch (err) {
+        if (receiptFile) fs.unlink(receiptFile.path, () => {});
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ message: 'Username or email is already registered or pending review.' });
         }
@@ -48,7 +80,7 @@ const login = async (req, res) => {
         }
 
         const user = rows[0];
-        const isMatch = await bcrypt.compare(password, user.password_hash);
+        const isMatch = await comparePassword(password, user.password_hash);
 
         if (!isMatch) {
             return res.status(401).json({ message: 'Invalid username or password.' });

@@ -28,8 +28,10 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
         { name: 'Join Requests', icon: UserPlus, path: '/admin/requests' },
         { name: 'Member Directory', icon: Users, path: '/admin/members' },
         { name: 'Coach Profiles', icon: UserCheck, path: '/admin/coaches' },
+        { name: 'Guest Directory', icon: UserPlus, path: '/admin/guests' },
         { name: 'Inquiries', icon: MessageSquare, path: '/admin/inquiries' },
         { name: 'Daily Attendance', icon: ClipboardCheck, path: '/admin/attendance' },
+        { name: 'Access Management', icon: UserCog, path: '/admin/users' },
       ]},
       { group: "Finance", items: [
         { name: 'Verify Receipts', icon: ShieldCheck, path: '/admin/verify-payments' },

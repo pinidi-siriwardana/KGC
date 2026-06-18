@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -6,6 +7,13 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const memberRoutes = require('./routes/memberRoutes');
 const coachRoutes = require('./routes/coachRoutes');
+const userRoutes = require('./routes/userRoutes');
+const membersRoutes = require('./routes/membersRoutes');
+const coachesRoutes = require('./routes/coachesRoutes');
+const guestsRoutes = require('./routes/guestsRoutes');
+const courtsRoutes = require('./routes/courtsRoutes');
+const paymentsRoutes = require('./routes/paymentsRoutes');
+const membershipTypesRoutes = require('./routes/membershipTypesRoutes');
 const logger = require('./middleware/logger');
 
 const app = express();
@@ -14,10 +22,22 @@ app.use(cors());
 app.use(express.json());
 app.use(logger);
 
+// Uploaded payment slips, served back for the admin receipt review UI.
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/member', memberRoutes);
 app.use('/api/coach', coachRoutes);
+
+// Admin resource management (CRUD over users/members/coaches/guests/courts/payments)
+app.use('/api/users', userRoutes);
+app.use('/api/members', membersRoutes);
+app.use('/api/coaches', coachesRoutes);
+app.use('/api/guests', guestsRoutes);
+app.use('/api/courts', courtsRoutes);
+app.use('/api/payments', paymentsRoutes);
+app.use('/api/membership-types', membershipTypesRoutes);
 
 // --- Health Check ---
 app.get('/', (req, res) => {
