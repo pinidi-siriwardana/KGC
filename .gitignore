@@ -1,0 +1,39 @@
+# --- System Files ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# --- Backend Specifics ---
+backend/node_modules/
+backend/.env
+backend/uploads/slips/*
+!backend/uploads/slips/.gitkeep
+
+# --- Frontend Specifics ---
+frontend/node_modules/
+frontend/.env
+frontend/.env.local
+frontend/*.local
+frontend/dist/
+frontend/dist-ssr/
+frontend/build/
+
+# --- IDE Configs ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Claude Code local settings ---
+**/.claude/settings.local.json

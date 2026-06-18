@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  /* 1. Heritage Palette */
+  --color-obsidian: #05070a;
+  --color-emerald: #065f46;
+  --color-amber: #fbbf24;
+  --color-alabaster: #FAF9F6;
+  --color-muted: #6b7280;
+
+  /* 2. Signature Radius */
+  --radius-club: 3rem;
+
+  /* 3. Typography */
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "Inter", sans-serif;
+
+  /* 4. Tracking */
+  --letter-spacing-registry: 0.4em;
+}
+
+/* 5. Global Base Styles */
+@layer base {
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:ital,wght@0,600;1,400&display=swap');
+
+  body {
+    background-color: var(--color-alabaster);
+    color: var(--color-obsidian);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-serif);
+  }
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
