@@ -14,6 +14,7 @@ const guestsRoutes = require('./routes/guestsRoutes');
 const courtsRoutes = require('./routes/courtsRoutes');
 const paymentsRoutes = require('./routes/paymentsRoutes');
 const membershipTypesRoutes = require('./routes/membershipTypesRoutes');
+const inquiriesRoutes = require('./routes/inquiriesRoutes');
 const logger = require('./middleware/logger');
 
 const app = express();
@@ -38,6 +39,7 @@ app.use('/api/guests', guestsRoutes);
 app.use('/api/courts', courtsRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/membership-types', membershipTypesRoutes);
+app.use('/api/inquiries', inquiriesRoutes);
 
 // --- Health Check ---
 app.get('/', (req, res) => {

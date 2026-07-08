@@ -20,6 +20,7 @@ import AdminReciepts from './pages/admin/AdminReciepts';
 import AdminCourts from './pages/admin/AdminCourts';
 import AdminPayments from './pages/admin/AdminPayments';
 import AdminMembershipTypes from './pages/admin/AdminMembershipTypes';
+import AdminInquiries from './pages/admin/AdminInquiries';
 
 import MemberHome from './pages/member/MemberHome';
 
@@ -62,6 +63,7 @@ const MainContent = () => {
               <Route path="/admin/payments" element={<AdminPayments />} />
               <Route path="/admin/membership-types" element={<AdminMembershipTypes />} />
               <Route path="/admin/courts" element={<AdminCourts />} />
+              <Route path="/admin/inquiries" element={<AdminInquiries />} />
             </Route>
           </Route>
 

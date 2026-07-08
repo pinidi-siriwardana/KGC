@@ -1,17 +1,47 @@
-import React from 'react';
-import { Mail, Phone, MapPin, Send, Clock, MessageSquare, PhoneCall } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mail, Phone, MapPin, Send, Clock, MessageSquare } from 'lucide-react';
+import { API_URL } from '../../utils/api';
 
 const ContactSection = () => {
-    const handleSubmit = (e) => {
+    const [formData, setFormData] = useState({ full_name: '', email: '', phone: '', message: '' });
+    const [submitting, setSubmitting] = useState(false);
+    const [submitted, setSubmitted] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        alert("Inquiry Sent. The Club Secretary will contact you shortly.");
+        setSubmitting(true);
+        setError('');
+
+        try {
+            const res = await fetch(`${API_URL}/api/inquiries`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData),
+            });
+
+            if (res.ok) {
+                setSubmitted(true);
+                setFormData({ full_name: '', email: '', phone: '', message: '' });
+            } else {
+                const data = await res.json();
+                setError(data.message || 'Failed to send. Please try again.');
+            }
+        } catch {
+            setError('Network error. Please check your connection and try again.');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
         <section id='contact' className="py-12 bg-white">
             <div className="max-w-7xl mx-auto px-6 lg:px-20">
 
-                {/* Section Title */}
                 <div className="mb-16">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald/10 text-emerald text-[10px] font-black uppercase tracking-registry mb-4">
                         Concierge
@@ -23,7 +53,7 @@ const ContactSection = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 rounded-club overflow-hidden shadow-2xl border border-obsidian/5">
 
-                    {/* Left: Club Details (Obsidian Side) */}
+                    {/* Left: Club Details */}
                     <div className="lg:col-span-5 bg-obsidian p-10 md:p-16 text-white relative">
                         <div className="absolute bottom-0 right-0 w-32 h-32 bg-amber opacity-5 blur-3xl rounded-full" />
                         <h3 className="text-3xl font-serif italic text-amber mb-12">Club Information</h3>
@@ -69,66 +99,100 @@ const ContactSection = () => {
                         </div>
                     </div>
 
-                    {/* Right: The Form (Restored with Phone Field) */}
+                    {/* Right: The Form */}
                     <div className="lg:col-span-7 bg-white p-10 md:p-16 flex flex-col justify-center">
-                        <div className="flex items-center gap-3 mb-10">
-                            <MessageSquare size={24} className="text-emerald" />
-                            <h3 className="text-2xl font-black text-obsidian uppercase tracking-tighter">Send a Message</h3>
-                        </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* Row 1: Full Name */}
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Full Name</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all placeholder:text-obsidian/20 font-medium"
-                                    placeholder="Enter your name"
-                                />
-                            </div>
-
-                            {/* Row 2: Email and Contact Number (Split) */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Email Address</label>
-                                    <input
-                                        type="email"
-                                        required
-                                        className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all placeholder:text-obsidian/20 font-medium"
-                                        placeholder="email@example.com"
-                                    />
+                        {submitted ? (
+                            <div className="text-center py-12">
+                                <div className="w-16 h-16 rounded-full bg-emerald/10 flex items-center justify-center mx-auto mb-6">
+                                    <Send size={28} className="text-emerald" />
                                 </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Contact Number</label>
-                                    <input
-                                        type="tel"
-                                        required
-                                        className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all placeholder:text-obsidian/20 font-medium"
-                                        placeholder="+94 7X XXX XXXX"
-                                    />
+                                <h3 className="text-2xl font-black text-obsidian uppercase tracking-tighter mb-3">Message Received</h3>
+                                <p className="text-obsidian/50 text-sm font-medium mb-6">Thank you for reaching out. The Club Secretary will contact you shortly.</p>
+                                <button
+                                    onClick={() => setSubmitted(false)}
+                                    className="text-[10px] font-black uppercase tracking-registry text-emerald hover:underline"
+                                >
+                                    Send another message
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-3 mb-10">
+                                    <MessageSquare size={24} className="text-emerald" />
+                                    <h3 className="text-2xl font-black text-obsidian uppercase tracking-tighter">Send a Message</h3>
                                 </div>
-                            </div>
 
-                            {/* Row 3: Your Message */}
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Your Message</label>
-                                <textarea
-                                    rows="4"
-                                    required
-                                    className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all resize-none placeholder:text-obsidian/20 font-medium"
-                                    placeholder="How can we help the Club assist you?"
-                                ></textarea>
-                            </div>
+                                {error && (
+                                    <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-sm font-medium">
+                                        {error}
+                                    </div>
+                                )}
 
-                            <button
-                                type="submit"
-                                className="w-full md:w-fit bg-obsidian text-white px-12 py-5 rounded-full font-black uppercase tracking-registry text-[11px] flex items-center justify-center gap-4 hover:bg-emerald transition-all shadow-xl active:scale-95 group"
-                            >
-                                Send Message
-                                <Send size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-300" />
-                            </button>
-                        </form>
+                                <form onSubmit={handleSubmit} className="space-y-6">
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Full Name</label>
+                                        <input
+                                            type="text"
+                                            name="full_name"
+                                            required
+                                            value={formData.full_name}
+                                            onChange={handleChange}
+                                            className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all placeholder:text-obsidian/20 font-medium"
+                                            placeholder="Enter your name"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Email Address</label>
+                                            <input
+                                                type="email"
+                                                name="email"
+                                                required
+                                                value={formData.email}
+                                                onChange={handleChange}
+                                                className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all placeholder:text-obsidian/20 font-medium"
+                                                placeholder="email@example.com"
+                                            />
+                                        </div>
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Contact Number</label>
+                                            <input
+                                                type="tel"
+                                                name="phone"
+                                                value={formData.phone}
+                                                onChange={handleChange}
+                                                className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all placeholder:text-obsidian/20 font-medium"
+                                                placeholder="+94 7X XXX XXXX"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-registry text-obsidian/40 ml-1">Your Message</label>
+                                        <textarea
+                                            rows="4"
+                                            name="message"
+                                            required
+                                            value={formData.message}
+                                            onChange={handleChange}
+                                            className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all resize-none placeholder:text-obsidian/20 font-medium"
+                                            placeholder="How can we help the Club assist you?"
+                                        ></textarea>
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="w-full md:w-fit bg-obsidian text-white px-12 py-5 rounded-full font-black uppercase tracking-registry text-[11px] flex items-center justify-center gap-4 hover:bg-emerald transition-all shadow-xl active:scale-95 group disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        {submitting ? 'Sending...' : 'Send Message'}
+                                        <Send size={16} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform duration-300" />
+                                    </button>
+                                </form>
+                            </>
+                        )}
                     </div>
 
                 </div>
