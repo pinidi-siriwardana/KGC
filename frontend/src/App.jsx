@@ -21,6 +21,7 @@ import AdminCourts from './pages/admin/AdminCourts';
 import AdminPayments from './pages/admin/AdminPayments';
 import AdminMembershipTypes from './pages/admin/AdminMembershipTypes';
 import AdminInquiries from './pages/admin/AdminInquiries';
+import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 
 import MemberHome from './pages/member/MemberHome';
 
@@ -64,6 +65,7 @@ const MainContent = () => {
               <Route path="/admin/membership-types" element={<AdminMembershipTypes />} />
               <Route path="/admin/courts" element={<AdminCourts />} />
               <Route path="/admin/inquiries" element={<AdminInquiries />} />
+              <Route path="/admin/announcements" element={<AdminAnnouncements />} />
             </Route>
           </Route>
 

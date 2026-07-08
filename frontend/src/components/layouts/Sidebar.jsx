@@ -22,6 +22,7 @@ const Sidebar = ({ role = 'admin' }) => { // Default to admin for safety
           { name: 'Live Bookings', icon: CalendarClock, path: '/admin/bookings' },
           { name: 'Court Status', icon: Trophy, path: '/admin/courts' },
           { name: 'Registration Queue', icon: Timer, path: '/admin/registrationQueue' },
+          { name: 'Announcements', icon: Megaphone, path: '/admin/announcements' },
         ]
       },
       {
