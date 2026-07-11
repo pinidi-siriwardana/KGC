@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PlusCircle, Users, CreditCard, Activity, Timer } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import { apiFetch } from '../../utils/api';
@@ -11,10 +11,15 @@ const CATEGORY_BORDER = {
   GENERAL: 'border-emerald-500',
 };
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 const CoachHome = () => {
+  const navigate = useNavigate();
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
   const [coach, setCoach] = useState(null);
+  const [upcomingBookings, setUpcomingBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
 
   useEffect(() => {
     apiFetch('/api/announcements')
@@ -29,6 +34,19 @@ const CoachHome = () => {
       .then((res) => res.json())
       .then((data) => setCoach(data.coach || null))
       .catch(() => setCoach(null));
+  }, []);
+
+  useEffect(() => {
+    apiFetch('/api/bookings')
+      .then((res) => res.json())
+      .then((data) => {
+        const upcoming = (data.data || [])
+          .filter((b) => b.booking_date >= todayISO() && ['pending', 'confirmed'].includes(b.status))
+          .sort((a, b) => (a.booking_date + a.start_time).localeCompare(b.booking_date + b.start_time));
+        setUpcomingBookings(upcoming.slice(0, 4));
+      })
+      .catch(() => setUpcomingBookings([]))
+      .finally(() => setLoadingBookings(false));
   }, []);
 
   return (
@@ -47,7 +65,10 @@ const CoachHome = () => {
             {coach?.specialization ? `${coach.specialization} Coach` : 'Managing Sessions'}
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-amber-500 px-6 py-3 rounded-xl text-slate-950 font-black uppercase tracking-widest text-[10px] hover:bg-slate-900 hover:text-white transition-all shadow-lg shadow-amber-500/20">
+        <button
+          onClick={() => navigate('/coach/book')}
+          className="flex items-center gap-2 bg-amber-500 px-6 py-3 rounded-xl text-slate-950 font-black uppercase tracking-widest text-[10px] hover:bg-slate-900 hover:text-white transition-all shadow-lg shadow-amber-500/20"
+        >
           <PlusCircle size={16} />
           Reserve Court
         </button>
@@ -71,29 +92,33 @@ const CoachHome = () => {
           </div>
 
           <div className="space-y-4">
-            {/* Session Card */}
-            <div className="flex items-center justify-between p-5 bg-slate-50 border border-slate-100 rounded-2xl border-l-4 border-l-emerald-500 group hover:bg-white hover:shadow-md transition-all">
-              <div className="flex items-center gap-5">
-                <div className="text-right border-r border-slate-200 pr-5">
-                   <p className="text-slate-900 font-bold text-sm">04:00</p>
-                   <p className="text-slate-400 text-[9px] uppercase font-black">PM</p>
-                </div>
-                <div>
-                  <p className="text-slate-800 text-sm font-bold group-hover:text-amber-600 transition-colors">Advanced Drill: S. Perera</p>
-                  <p className="text-slate-500 text-[10px] uppercase flex items-center gap-2">
-                    <Timer size={12} className="text-emerald-600" /> 60 Mins • Court 02
-                  </p>
-                </div>
+            {loadingBookings && (
+              <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black">Loading schedule...</p>
+            )}
+            {!loadingBookings && upcomingBookings.length === 0 && (
+              <div className="flex items-center justify-center p-5 border border-dashed border-slate-200 rounded-2xl bg-slate-50/30">
+                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">No upcoming sessions reserved</p>
               </div>
-              <button className="text-[9px] font-black uppercase text-slate-400 hover:text-slate-900 transition-colors">
-                Details
-              </button>
-            </div>
-            
-            {/* Empty Slot Placeholder */}
-            <div className="flex items-center justify-center p-5 border border-dashed border-slate-200 rounded-2xl bg-slate-50/30">
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Next Available Slot: 06:00 PM</p>
-            </div>
+            )}
+            {upcomingBookings.map((b) => (
+              <div key={b.booking_id} className="flex items-center justify-between p-5 bg-slate-50 border border-slate-100 rounded-2xl border-l-4 border-l-emerald-500 group hover:bg-white hover:shadow-md transition-all">
+                <div className="flex items-center gap-5">
+                  <div className="text-right border-r border-slate-200 pr-5">
+                     <p className="text-slate-900 font-bold text-sm">{b.start_time?.slice(0, 5)}</p>
+                     <p className="text-slate-400 text-[9px] uppercase font-black">{b.booking_date}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-800 text-sm font-bold group-hover:text-amber-600 transition-colors">{b.court_name} ({b.court_type})</p>
+                    <p className="text-slate-500 text-[10px] uppercase flex items-center gap-2">
+                      <Timer size={12} className="text-emerald-600" /> {b.start_time?.slice(0, 5)} - {b.end_time?.slice(0, 5)}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-emerald-700 text-[9px] font-black uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                  {b.status}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 

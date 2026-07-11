@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { PlusCircle, Calendar, Trophy, Bell, Clock } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import { apiFetch } from '../../utils/api';
@@ -11,13 +11,18 @@ const CATEGORY_BORDER = {
   GENERAL: 'border-emerald-500',
 };
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 const formatDate = (dateStr) =>
   new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 const MemberHome = () => {
   const { member, membership } = useOutletContext();
+  const navigate = useNavigate();
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+  const [upcomingBookings, setUpcomingBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
 
   useEffect(() => {
     apiFetch('/api/announcements')
@@ -27,8 +32,22 @@ const MemberHome = () => {
       .finally(() => setLoadingAnnouncements(false));
   }, []);
 
+  useEffect(() => {
+    apiFetch('/api/bookings')
+      .then((res) => res.json())
+      .then((data) => {
+        const upcoming = (data.data || [])
+          .filter((b) => b.booking_date >= todayISO() && ['pending', 'confirmed'].includes(b.status))
+          .sort((a, b) => (a.booking_date + a.start_time).localeCompare(b.booking_date + b.start_time));
+        setUpcomingBookings(upcoming.slice(0, 3));
+      })
+      .catch(() => setUpcomingBookings([]))
+      .finally(() => setLoadingBookings(false));
+  }, []);
+
   const membershipValue = membership ? (membership.is_expired ? 'Expired' : 'Active') : 'No Plan';
   const membershipTrend = membership ? `Exp: ${formatDate(membership.end_date)}` : 'Contact Admin';
+  const nextBooking = upcomingBookings[0];
 
   return (
     <div className="relative space-y-10 animate-in fade-in duration-700">
@@ -43,7 +62,10 @@ const MemberHome = () => {
             Ready for a match today?
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-emerald-600 px-6 py-3 rounded-xl text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-900 transition-all shadow-lg shadow-emerald-600/20">
+        <button
+          onClick={() => navigate('/member/book')}
+          className="flex items-center gap-2 bg-emerald-600 px-6 py-3 rounded-xl text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-900 transition-all shadow-lg shadow-emerald-600/20"
+        >
           <PlusCircle size={16} />
           Book a Court
         </button>
@@ -53,12 +75,17 @@ const MemberHome = () => {
       <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Ensure StatCard uses dark text for labels and values */}
         <StatCard label="Membership" value={membershipValue} trend={membershipTrend} icon={Trophy} />
-        <StatCard label="Next Booking" value="Tomorrow" trend="08:00 AM" icon={Calendar} />
+        <StatCard
+          label="Next Booking"
+          value={nextBooking ? nextBooking.court_name : 'None'}
+          trend={nextBooking ? `${nextBooking.booking_date} • ${nextBooking.start_time?.slice(0, 5)}` : 'Book a slot'}
+          icon={Calendar}
+        />
         <StatCard label="Club Notifications" value="03" trend="New Update" icon={Bell} />
       </div>
 
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
+
         {/* Upcoming Bookings */}
         <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
           <div className="flex justify-between items-center mb-6">
@@ -67,20 +94,28 @@ const MemberHome = () => {
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:shadow-md transition-all group">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700">
-                  <Clock size={20} />
+            {loadingBookings && (
+              <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black">Loading bookings...</p>
+            )}
+            {!loadingBookings && upcomingBookings.length === 0 && (
+              <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black">No upcoming bookings yet.</p>
+            )}
+            {upcomingBookings.map((b) => (
+              <div key={b.booking_id} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:shadow-md transition-all group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700">
+                    <Clock size={20} />
+                  </div>
+                  <div>
+                    <p className="text-slate-900 text-sm font-bold group-hover:text-emerald-700 transition-colors">{b.court_name} ({b.court_type})</p>
+                    <p className="text-slate-500 text-[10px] uppercase">{b.booking_date} • {b.start_time?.slice(0, 5)} - {b.end_time?.slice(0, 5)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-slate-900 text-sm font-bold group-hover:text-emerald-700 transition-colors">Court 01 (Clay)</p>
-                  <p className="text-slate-500 text-[10px] uppercase">18th April • 08:00 AM - 09:00 AM</p>
-                </div>
+                <span className="text-emerald-700 text-[9px] font-black uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                  {b.status}
+                </span>
               </div>
-              <span className="text-emerald-700 text-[9px] font-black uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                Confirmed
-              </span>
-            </div>
+            ))}
           </div>
         </div>
 

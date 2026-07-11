@@ -16,6 +16,8 @@ const paymentsRoutes = require('./routes/paymentsRoutes');
 const membershipTypesRoutes = require('./routes/membershipTypesRoutes');
 const inquiriesRoutes = require('./routes/inquiriesRoutes');
 const announcementsRoutes = require('./routes/announcementsRoutes');
+const timeSlotsRoutes = require('./routes/timeSlotsRoutes');
+const bookingsRoutes = require('./routes/bookingsRoutes');
 const logger = require('./middleware/logger');
 
 const app = express();
@@ -42,6 +44,8 @@ app.use('/api/payments', paymentsRoutes);
 app.use('/api/membership-types', membershipTypesRoutes);
 app.use('/api/inquiries', inquiriesRoutes);
 app.use('/api/announcements', announcementsRoutes);
+app.use('/api/time-slots', timeSlotsRoutes);
+app.use('/api/bookings', bookingsRoutes);
 
 // --- Health Check ---
 app.get('/', (req, res) => {

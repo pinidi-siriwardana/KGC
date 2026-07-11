@@ -22,14 +22,20 @@ import AdminPayments from './pages/admin/AdminPayments';
 import AdminMembershipTypes from './pages/admin/AdminMembershipTypes';
 import AdminInquiries from './pages/admin/AdminInquiries';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
+import AdminBookings from './pages/admin/AdminBookings';
 
 import MemberHome from './pages/member/MemberHome';
 import MemberAnnouncements from './pages/member/MemberAnnouncements';
+import MemberBook from './pages/member/MemberBook';
+import MemberSchedule from './pages/member/MemberSchedule';
+import MemberHistory from './pages/member/MemberHistory';
 import MembershipGate from './components/member/MembershipGate';
 
 
 import CoachHome from './pages/coach/CoachHome';
 import CoachAnnouncements from './pages/coach/CoachAnnouncements';
+import CoachBook from './pages/coach/CoachBook';
+import CoachSessions from './pages/coach/CoachSessions';
 
 const MainContent = () => {
   const location = useLocation();
@@ -69,6 +75,8 @@ const MainContent = () => {
               <Route path="/admin/courts" element={<AdminCourts />} />
               <Route path="/admin/inquiries" element={<AdminInquiries />} />
               <Route path="/admin/announcements" element={<AdminAnnouncements />} />
+              <Route path="/admin/bookings" element={<AdminBookings />} />
+              <Route path="/admin/schedule" element={<AdminBookings />} />
             </Route>
           </Route>
 
@@ -78,6 +86,9 @@ const MainContent = () => {
               <Route element={<MembershipGate />}>
                 <Route path="/member/dashboard" element={<MemberHome />} />
                 <Route path="/member/announcements" element={<MemberAnnouncements />} />
+                <Route path="/member/book" element={<MemberBook />} />
+                <Route path="/member/schedule" element={<MemberSchedule />} />
+                <Route path="/member/history" element={<MemberHistory />} />
               </Route>
             </Route>
           </Route>
@@ -87,6 +98,8 @@ const MainContent = () => {
             <Route element={<DashboardLayout role="coach" />}>
               <Route path="/coach/dashboard" element={<CoachHome />} />
               <Route path="/coach/announcements" element={<CoachAnnouncements />} />
+              <Route path="/coach/book" element={<CoachBook />} />
+              <Route path="/coach/sessions" element={<CoachSessions />} />
             </Route>
           </Route>
         </Routes>
