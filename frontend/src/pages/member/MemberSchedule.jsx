@@ -10,6 +10,7 @@ const formatDate = (dateStr) =>
 const MemberSchedule = () => {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [cancellationFee, setCancellationFee] = useState(null);
 
     const fetchBookings = () => {
         apiFetch('/api/bookings')
@@ -20,17 +21,26 @@ const MemberSchedule = () => {
 
     useEffect(() => { fetchBookings(); }, []);
 
+    useEffect(() => {
+        apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
+    }, []);
+
     const handleCancel = async (booking) => {
-        if (!window.confirm('Cancel this booking?')) return;
+        const feeNote = cancellationFee && Number(cancellationFee) > 0
+            ? ` A cancellation fee of LKR ${cancellationFee} will be charged to your account.`
+            : '';
+        if (!window.confirm(`Cancel this booking?${feeNote}`)) return;
+
         const res = await apiFetch(`/api/bookings/${booking.booking_id}`, {
             method: 'PATCH',
             body: JSON.stringify({ action: 'cancel' }),
         });
+        const result = await res.json();
         if (res.ok) {
+            alert(result.message || 'Booking cancelled.');
             fetchBookings();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to cancel booking.');
+            alert(result.message || 'Failed to cancel booking.');
         }
     };
 

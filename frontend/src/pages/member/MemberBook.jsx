@@ -16,10 +16,13 @@ const MemberBook = () => {
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState('');
+    const [cancellationFee, setCancellationFee] = useState(null);
+    const [policyAcknowledged, setPolicyAcknowledged] = useState(false);
 
     useEffect(() => {
         apiFetch('/api/courts').then((res) => res.json()).then((data) => setCourts(data.data || []));
         apiFetch('/api/time-slots').then((res) => res.json()).then((data) => setSlots(data.data || []));
+        apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
     }, []);
 
     useEffect(() => {
@@ -36,11 +39,18 @@ const MemberBook = () => {
 
     const handleSelectSlot = (court, slot) => {
         setError('');
+        setPolicyAcknowledged(false);
         setPending({ court, slot });
     };
 
     const handleConfirm = async (e) => {
         e.preventDefault();
+
+        if (!policyAcknowledged) {
+            setError('Please acknowledge the cancellation policy before confirming.');
+            return;
+        }
+
         setSubmitting(true);
         setError('');
 
@@ -113,6 +123,26 @@ const MemberBook = () => {
                             <span className="font-bold text-slate-900">{pending.slot.start_time?.slice(0, 5)}–{pending.slot.end_time?.slice(0, 5)}</span>?
                         </p>
                         <p className="text-emerald-600 text-[10px] font-black uppercase tracking-widest">Included with your membership — no charge</p>
+
+                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-2">
+                            <p className="text-amber-800 text-xs font-bold">Cancellation Policy</p>
+                            <p className="text-amber-700 text-[11px] leading-relaxed">
+                                If you cancel this booking after confirming, a cancellation fee of{' '}
+                                <span className="font-bold">LKR {cancellationFee ?? '...'}</span> will be charged to your account.
+                            </p>
+                            <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={policyAcknowledged}
+                                    onChange={(e) => setPolicyAcknowledged(e.target.checked)}
+                                    className="mt-0.5"
+                                />
+                                <span className="text-amber-800 text-[11px] font-bold">
+                                    I understand and agree to the cancellation policy.
+                                </span>
+                            </label>
+                        </div>
+
                         {error && <p className="text-red-500 text-[11px] font-bold">{error}</p>}
                     </div>
                 )}

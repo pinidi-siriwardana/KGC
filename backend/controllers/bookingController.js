@@ -211,7 +211,7 @@ const updateBookingStatus = async (req, res) => {
     }
 
     try {
-        await withTransaction(async (connection) => {
+        const cancellationFee = await withTransaction(async (connection) => {
             const [[booking]] = await connection.query('SELECT * FROM bookings WHERE booking_id = ? FOR UPDATE', [id]);
             if (!booking) notFound('Booking not found.');
 
@@ -221,16 +221,18 @@ const updateBookingStatus = async (req, res) => {
                         'UPDATE bookings SET lock_status = ? WHERE booking_id = ?',
                         [action === 'lock' ? 'locked' : 'unlocked', id]
                     );
-                    return;
+                    return null;
                 }
                 if (!['pending', 'confirmed'].includes(booking.status)) {
                     conflict(`This booking is already ${booking.status}.`);
                 }
+                // Admin-initiated cancel/reject never charges the customer —
+                // only a member/coach's own self-cancel does, below.
                 await connection.query(
                     'UPDATE bookings SET status = ? WHERE booking_id = ?',
                     [action === 'cancel' ? 'cancelled' : 'rejected', id]
                 );
-                return;
+                return null;
             }
 
             if (action !== 'cancel') forbidden('You can only cancel your own bookings.');
@@ -245,9 +247,27 @@ const updateBookingStatus = async (req, res) => {
             }
 
             await connection.query("UPDATE bookings SET status = 'cancelled' WHERE booking_id = ?", [id]);
+
+            const [[setting]] = await connection.query(
+                "SELECT setting_value FROM club_settings WHERE setting_key = 'cancellation_fee'"
+            );
+            const fee = setting ? Number(setting.setting_value) : 0;
+
+            if (fee > 0) {
+                await connection.query(
+                    `INSERT INTO payments (amount, payment_date, payment_type, member_id, coach_id, booking_id, handled_by, status, notes)
+                     VALUES (?, NOW(), 'cancellation_fee', ?, ?, ?, ?, 'recorded', 'Self-cancellation fee')`,
+                    [fee, ownerField === 'member_id' ? selfId : null, ownerField === 'coach_id' ? selfId : null, id, req.user.user_id]
+                );
+            }
+
+            return fee;
         });
 
-        res.json({ message: 'Booking updated.' });
+        res.json({
+            message: cancellationFee ? `Booking cancelled. A cancellation fee of LKR ${cancellationFee} has been charged to your account.` : 'Booking updated.',
+            cancellation_fee: cancellationFee || 0,
+        });
     } catch (err) {
         if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
         res.status(500).json({ message: 'Failed to update booking.', error: err.message });

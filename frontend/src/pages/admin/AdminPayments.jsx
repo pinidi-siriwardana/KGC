@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck } from 'lucide-react';
+import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck, Ban } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 
@@ -8,6 +8,7 @@ const PAYMENT_TYPE_ICON = {
     booking_fee: Trophy,
     coach_registration: UserCheck,
     other: Receipt,
+    cancellation_fee: Ban,
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -141,6 +142,7 @@ const AdminPayments = () => {
                                 <option value="membership">Membership</option>
                                 <option value="booking_fee">Booking Fee</option>
                                 <option value="coach_registration">Coach Registration</option>
+                                <option value="cancellation_fee">Cancellation Fee</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>

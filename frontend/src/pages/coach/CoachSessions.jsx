@@ -18,6 +18,7 @@ const CoachSessions = () => {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState('upcoming');
+    const [cancellationFee, setCancellationFee] = useState(null);
 
     const fetchBookings = () => {
         apiFetch('/api/bookings')
@@ -28,17 +29,26 @@ const CoachSessions = () => {
 
     useEffect(() => { fetchBookings(); }, []);
 
+    useEffect(() => {
+        apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
+    }, []);
+
     const handleCancel = async (booking) => {
-        if (!window.confirm('Cancel this session?')) return;
+        const feeNote = cancellationFee && Number(cancellationFee) > 0
+            ? ` A cancellation fee of LKR ${cancellationFee} will be charged to your account.`
+            : '';
+        if (!window.confirm(`Cancel this session?${feeNote}`)) return;
+
         const res = await apiFetch(`/api/bookings/${booking.booking_id}`, {
             method: 'PATCH',
             body: JSON.stringify({ action: 'cancel' }),
         });
+        const result = await res.json();
         if (res.ok) {
+            alert(result.message || 'Session cancelled.');
             fetchBookings();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to cancel session.');
+            alert(result.message || 'Failed to cancel session.');
         }
     };
 

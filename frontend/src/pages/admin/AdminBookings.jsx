@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Filter, Lock, Unlock, XCircle, Ban, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, Filter, Lock, Unlock, XCircle, Ban, CheckCircle2, Pencil, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
 import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
@@ -40,13 +40,40 @@ const AdminBookings = () => {
     const [filters, setFilters] = useState({ date: '', status: '', court_id: '' });
     const [loadingBookings, setLoadingBookings] = useState(true);
 
+    const [cancellationFee, setCancellationFee] = useState(null);
+    const [editingFee, setEditingFee] = useState(false);
+    const [feeInput, setFeeInput] = useState('');
+    const [savingFee, setSavingFee] = useState(false);
+
     useEffect(() => {
         apiFetch('/api/courts').then((res) => res.json()).then((data) => setCourts(data.data || []));
         apiFetch('/api/time-slots').then((res) => res.json()).then((data) => setSlots(data.data || []));
         apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
         apiFetch('/api/coaches').then((res) => res.json()).then((data) => setCoaches(data.data || []));
         apiFetch('/api/guests').then((res) => res.json()).then((data) => setGuests(Array.isArray(data) ? data : []));
+        apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
     }, []);
+
+    const handleEditFee = () => {
+        setFeeInput(cancellationFee ?? '');
+        setEditingFee(true);
+    };
+
+    const handleSaveFee = async () => {
+        setSavingFee(true);
+        const res = await apiFetch('/api/settings', {
+            method: 'PATCH',
+            body: JSON.stringify({ cancellation_fee: feeInput }),
+        });
+        setSavingFee(false);
+        if (res.ok) {
+            setCancellationFee(feeInput);
+            setEditingFee(false);
+        } else {
+            const err = await res.json();
+            alert(err.message || 'Failed to update cancellation fee.');
+        }
+    };
 
     const refreshAvailability = () => {
         apiFetch(`/api/bookings/availability?date=${selectedDate}`)
@@ -156,6 +183,40 @@ const AdminBookings = () => {
                     <CheckCircle2 size={16} /> {success}
                 </div>
             )}
+
+            <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-2xl px-6 py-4">
+                <div className="flex items-center gap-3">
+                    <AlertTriangle size={16} className="text-amber-600" />
+                    <div>
+                        <p className="text-amber-800 text-xs font-black uppercase tracking-widest">Cancellation Fee</p>
+                        <p className="text-amber-600 text-[10px] font-bold uppercase">Charged when a member/coach self-cancels a booking</p>
+                    </div>
+                </div>
+                {editingFee ? (
+                    <div className="flex items-center gap-2">
+                        <span className="text-amber-700 text-xs font-bold">LKR</span>
+                        <input
+                            type="number" step="0.01" min="0" autoFocus
+                            value={feeInput}
+                            onChange={(e) => setFeeInput(e.target.value)}
+                            className="w-28 px-3 py-1.5 bg-white border border-amber-200 rounded-lg text-sm outline-none"
+                        />
+                        <button onClick={handleSaveFee} disabled={savingFee}
+                            className="text-[9px] font-black uppercase tracking-widest bg-amber-600 text-white px-3 py-1.5 rounded-lg hover:bg-amber-700 transition-all disabled:opacity-50">
+                            {savingFee ? 'Saving...' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingFee(false)}
+                            className="text-[9px] font-black uppercase tracking-widest text-amber-600 px-2 py-1.5">
+                            Cancel
+                        </button>
+                    </div>
+                ) : (
+                    <button onClick={handleEditFee} className="flex items-center gap-2 text-amber-800 hover:text-amber-900 transition-colors">
+                        <span className="text-lg font-bold font-mono">LKR {cancellationFee ?? '...'}</span>
+                        <Pencil size={14} />
+                    </button>
+                )}
+            </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-6">
                 <div className="flex items-center justify-between">
@@ -322,6 +383,9 @@ const AdminBookings = () => {
                                         <option key={m.member_id} value={m.member_id}>{m.full_name} — {m.email}</option>
                                     ))}
                                 </select>
+                                <p className="text-amber-600 text-[10px] font-bold pt-1">
+                                    Note: if this member self-cancels later, a LKR {cancellationFee ?? '...'} cancellation fee applies.
+                                </p>
                             </div>
                         )}
 
@@ -335,6 +399,9 @@ const AdminBookings = () => {
                                         <option key={c.coach_id} value={c.coach_id}>{c.full_name} — {c.email}</option>
                                     ))}
                                 </select>
+                                <p className="text-amber-600 text-[10px] font-bold pt-1">
+                                    Note: if this coach self-cancels later, a LKR {cancellationFee ?? '...'} cancellation fee applies.
+                                </p>
                             </div>
                         )}
 
