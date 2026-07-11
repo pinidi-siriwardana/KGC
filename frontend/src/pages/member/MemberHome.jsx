@@ -1,8 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { PlusCircle, Calendar, Trophy, Bell, Clock } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
+import { apiFetch } from '../../utils/api';
+
+const CATEGORY_BORDER = {
+  CHAMPIONSHIP: 'border-amber-500',
+  MAINTENANCE: 'border-red-500',
+  'CLUB EVENT': 'border-slate-900',
+  GENERAL: 'border-emerald-500',
+};
 
 const MemberHome = () => {
+  const [announcements, setAnnouncements] = useState([]);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+
+  useEffect(() => {
+    apiFetch('/api/announcements')
+      .then((res) => res.json())
+      .then((data) => setAnnouncements((data.data || []).slice(0, 3)))
+      .catch(() => setAnnouncements([]))
+      .finally(() => setLoadingAnnouncements(false));
+  }, []);
+
   return (
     <div className="relative space-y-10 animate-in fade-in duration-700">
       {/* Background Glows (Subtle for white background) */}
@@ -61,18 +81,28 @@ const MemberHome = () => {
         <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
             <h3 className="text-slate-800 text-lg font-serif italic mb-6">Club Notices</h3>
             <div className="space-y-6">
-                <div className="border-l-2 border-amber-500 pl-4 py-1 hover:bg-slate-50 transition-colors rounded-r-lg">
-                    <p className="text-slate-800 text-sm font-bold leading-tight">Annual General Meeting 2026</p>
-                    <p className="text-slate-500 text-[10px] mt-1 italic font-medium">All members are requested to attend...</p>
-                </div>
-                <div className="border-l-2 border-emerald-500 pl-4 py-1 hover:bg-slate-50 transition-colors rounded-r-lg">
-                    <p className="text-slate-800 text-sm font-bold leading-tight">Court 03 Maintenance</p>
-                    <p className="text-slate-500 text-[10px] mt-1 italic font-medium">Closed for resurfacing until Monday.</p>
-                </div>
+                {loadingAnnouncements && (
+                    <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black">Loading notices...</p>
+                )}
+                {!loadingAnnouncements && announcements.length === 0 && (
+                    <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black">No announcements yet.</p>
+                )}
+                {announcements.map((item) => (
+                    <div
+                        key={item.announcement_id}
+                        className={`border-l-2 ${CATEGORY_BORDER[item.category] || CATEGORY_BORDER.GENERAL} pl-4 py-1 hover:bg-slate-50 transition-colors rounded-r-lg`}
+                    >
+                        <p className="text-slate-800 text-sm font-bold leading-tight">{item.title}</p>
+                        <p className="text-slate-500 text-[10px] mt-1 italic font-medium truncate">{item.content}</p>
+                    </div>
+                ))}
             </div>
-            <button className="w-full mt-8 py-3 border border-slate-200 rounded-xl text-[9px] text-slate-400 uppercase tracking-widest font-black hover:text-slate-900 hover:border-slate-900 transition-all">
+            <Link
+                to="/member/announcements"
+                className="block w-full mt-8 py-3 border border-slate-200 rounded-xl text-center text-[9px] text-slate-400 uppercase tracking-widest font-black hover:text-slate-900 hover:border-slate-900 transition-all no-underline"
+            >
                 View All Announcements
-            </button>
+            </Link>
         </div>
 
       </div>

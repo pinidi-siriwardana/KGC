@@ -24,9 +24,11 @@ import AdminInquiries from './pages/admin/AdminInquiries';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 
 import MemberHome from './pages/member/MemberHome';
+import MemberAnnouncements from './pages/member/MemberAnnouncements';
 
 
 import CoachHome from './pages/coach/CoachHome';
+import CoachAnnouncements from './pages/coach/CoachAnnouncements';
 
 const MainContent = () => {
   const location = useLocation();
@@ -73,6 +75,7 @@ const MainContent = () => {
           <Route element={<ProtectedRoute allowedRole="member" />}>
             <Route element={<DashboardLayout role="member" />}>
               <Route path="/member/dashboard" element={<MemberHome />} />
+              <Route path="/member/announcements" element={<MemberAnnouncements />} />
             </Route>
           </Route>
 
@@ -80,6 +83,7 @@ const MainContent = () => {
           <Route element={<ProtectedRoute allowedRole="coach" />}>
             <Route element={<DashboardLayout role="coach" />}>
               <Route path="/coach/dashboard" element={<CoachHome />} />
+              <Route path="/coach/announcements" element={<CoachAnnouncements />} />
             </Route>
           </Route>
         </Routes>
