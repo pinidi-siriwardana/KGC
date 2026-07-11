@@ -25,6 +25,7 @@ import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 
 import MemberHome from './pages/member/MemberHome';
 import MemberAnnouncements from './pages/member/MemberAnnouncements';
+import MembershipGate from './components/member/MembershipGate';
 
 
 import CoachHome from './pages/coach/CoachHome';
@@ -74,8 +75,10 @@ const MainContent = () => {
           {/* Member Area */}
           <Route element={<ProtectedRoute allowedRole="member" />}>
             <Route element={<DashboardLayout role="member" />}>
-              <Route path="/member/dashboard" element={<MemberHome />} />
-              <Route path="/member/announcements" element={<MemberAnnouncements />} />
+              <Route element={<MembershipGate />}>
+                <Route path="/member/dashboard" element={<MemberHome />} />
+                <Route path="/member/announcements" element={<MemberAnnouncements />} />
+              </Route>
             </Route>
           </Route>
 

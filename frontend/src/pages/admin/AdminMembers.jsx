@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { User, Mail, Phone, Settings, Trash2, Plus, ShieldCheck } from 'lucide-react';
 import Modal from '../../components/common/Modal';
+import MembershipStatusBadge from '../../components/common/MembershipStatusBadge';
 import { apiFetch } from '../../utils/api';
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const formatDate = (dateStr) =>
+  dateStr ? new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+const emptyFormData = () => ({
+  username: '', password: '', full_name: '', email: '', phone: '', status: 'active',
+  membership_type_id: '', start_date: todayISO(),
+});
 
 const AdminMembers = () => {
   const [members, setMembers] = useState([]);
+  const [membershipTypes, setMembershipTypes] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
-  const [formData, setFormData] = useState({
-    username: '', password: '', full_name: '', email: '', phone: '', status: 'active'
-  });
-
-  useEffect(() => { fetchMembers(); }, []);
+  const [formData, setFormData] = useState(emptyFormData);
 
   const fetchMembers = async () => {
     const res = await apiFetch('/api/members');
@@ -19,13 +27,18 @@ const AdminMembers = () => {
     setMembers(data.data || []);
   };
 
+  useEffect(() => {
+    apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
+    apiFetch('/api/membership-types').then((res) => res.json()).then((data) => setMembershipTypes(data.data || []));
+  }, []);
+
   const handleOpenModal = (member = null) => {
     if (member) {
       setEditingMember(member);
       setFormData(member);
     } else {
       setEditingMember(null);
-      setFormData({ username: '', password: '', full_name: '', email: '', phone: '', status: 'active' });
+      setFormData(emptyFormData());
     }
     setIsModalOpen(true);
   };
@@ -71,6 +84,7 @@ const AdminMembers = () => {
               <tr className="text-slate-400 text-[9px] uppercase tracking-widest bg-slate-50/50">
                 <th className="p-4 font-black">Member</th>
                 <th className="p-4 font-black">Contact</th>
+                <th className="p-4 font-black">Membership</th>
                 <th className="p-4 font-black">Status</th>
                 <th className="p-4 font-black text-right">Actions</th>
               </tr>
@@ -87,6 +101,11 @@ const AdminMembers = () => {
                   <td className="p-4">
                     <p className="text-[11px] text-slate-600 font-medium">{m.email}</p>
                     <p className="text-[10px] text-slate-400">{m.phone}</p>
+                  </td>
+                  <td className="p-4">
+                    <p className="text-[11px] text-slate-700 font-bold">{m.membership_plan || '—'}</p>
+                    <p className="text-[10px] text-slate-400 mb-1">Exp: {formatDate(m.membership_end_date)}</p>
+                    <MembershipStatusBadge endDate={m.membership_end_date} isExpired={m.is_expired} />
                   </td>
                   <td className="p-4">
                     <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full border ${m.status === 'active' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-amber-600 bg-amber-50 border-amber-100'}`}>{m.status}</span>
@@ -118,8 +137,29 @@ const AdminMembers = () => {
               </div>
               <div className="space-y-1">
                 <label className="text-[9px] font-black uppercase text-slate-400">Password</label>
-                <input type="password" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" 
+                <input type="password" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                   value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} required />
+              </div>
+            </div>
+          )}
+          {!editingMember && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-slate-400">Membership Plan</label>
+                <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                  value={formData.membership_type_id} onChange={(e) => setFormData({...formData, membership_type_id: e.target.value})} required>
+                  <option value="" disabled>Select a plan...</option>
+                  {membershipTypes.map((t) => (
+                    <option key={t.membership_type_id} value={t.membership_type_id}>
+                      {t.name} — LKR {t.price} / {t.duration_months}mo
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-slate-400">Start Date</label>
+                <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                  value={formData.start_date} onChange={(e) => setFormData({...formData, start_date: e.target.value})} required />
               </div>
             </div>
           )}

@@ -136,6 +136,15 @@ const DashboardLayout = () => {
   // Validate that the role is one of our keys, otherwise default to admin
   const role = ['admin', 'member', 'coach'].includes(detectedRole) ? detectedRole : 'admin';
 
+  const storedUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null');
+    } catch {
+      return null;
+    }
+  })();
+  const username = storedUser?.username || role;
+
   return (
     <div className="flex h-screen bg-white overflow-hidden font-sans">
       
@@ -170,11 +179,11 @@ const DashboardLayout = () => {
 
           <div className="flex items-center gap-6">
             <div className="text-right hidden sm:block">
-              <p className="text-gray-900 text-xs font-bold uppercase tracking-tighter capitalize">{role}</p>
+              <p className="text-gray-900 text-xs font-bold uppercase tracking-tighter">{username}</p>
               <p className="text-amber-600 text-[9px] font-black uppercase tracking-widest">Authorized Access</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white font-black text-xs uppercase">
-              {role.charAt(0)}
+              {username.charAt(0)}
             </div>
           </div>
         </header>

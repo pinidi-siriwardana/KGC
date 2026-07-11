@@ -14,6 +14,7 @@ const CATEGORY_BORDER = {
 const CoachHome = () => {
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+  const [coach, setCoach] = useState(null);
 
   useEffect(() => {
     apiFetch('/api/announcements')
@@ -23,20 +24,27 @@ const CoachHome = () => {
       .finally(() => setLoadingAnnouncements(false));
   }, []);
 
+  useEffect(() => {
+    apiFetch('/api/coach/me')
+      .then((res) => res.json())
+      .then((data) => setCoach(data.coach || null))
+      .catch(() => setCoach(null));
+  }, []);
+
   return (
     <div className="relative space-y-10 animate-in fade-in duration-700">
       {/* Background Glows (Green for Growth/Coaching - Adjusted for Light Mode) */}
       <div className="absolute -top-20 -right-20 w-80 h-80 bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none opacity-60" />
       <div className="absolute bottom-10 left-10 w-60 h-60 bg-amber-500/5 blur-[80px] rounded-full pointer-events-none opacity-40" />
-      
+
       {/* Header */}
       <header className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h1 className="text-slate-900 text-4xl font-serif italic">
-            Coach's <span className="text-amber-600">Court.</span>
+            {coach ? coach.full_name.split(' ')[0] : 'Coach'}'s <span className="text-amber-600">Court.</span>
           </h1>
           <p className="text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] mt-2 font-sans">
-            Managing Sessions • April 2026
+            {coach?.specialization ? `${coach.specialization} Coach` : 'Managing Sessions'}
           </p>
         </div>
         <button className="flex items-center gap-2 bg-amber-500 px-6 py-3 rounded-xl text-slate-950 font-black uppercase tracking-widest text-[10px] hover:bg-slate-900 hover:text-white transition-all shadow-lg shadow-amber-500/20">

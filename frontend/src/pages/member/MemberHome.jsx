@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { PlusCircle, Calendar, Trophy, Bell, Clock } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import { apiFetch } from '../../utils/api';
@@ -11,7 +11,11 @@ const CATEGORY_BORDER = {
   GENERAL: 'border-emerald-500',
 };
 
+const formatDate = (dateStr) =>
+  new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
 const MemberHome = () => {
+  const { member, membership } = useOutletContext();
   const [announcements, setAnnouncements] = useState([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
 
@@ -23,15 +27,18 @@ const MemberHome = () => {
       .finally(() => setLoadingAnnouncements(false));
   }, []);
 
+  const membershipValue = membership ? (membership.is_expired ? 'Expired' : 'Active') : 'No Plan';
+  const membershipTrend = membership ? `Exp: ${formatDate(membership.end_date)}` : 'Contact Admin';
+
   return (
     <div className="relative space-y-10 animate-in fade-in duration-700">
       {/* Background Glows (Subtle for white background) */}
       <div className="absolute -top-20 -right-20 w-80 h-80 bg-emerald-500/5 blur-[100px] rounded-full pointer-events-none" />
-      
+
       {/* Header */}
       <header className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-slate-900 text-4xl font-serif italic">Hello, Member.</h1>
+          <h1 className="text-slate-900 text-4xl font-serif italic">Hello, {member ? member.full_name.split(' ')[0] : 'Member'}.</h1>
           <p className="text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] mt-2">
             Ready for a match today?
           </p>
@@ -45,7 +52,7 @@ const MemberHome = () => {
       {/* Quick Status Grid */}
       <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Ensure StatCard uses dark text for labels and values */}
-        <StatCard label="Membership" value="Active" trend="Exp: Dec 2026" icon={Trophy} />
+        <StatCard label="Membership" value={membershipValue} trend={membershipTrend} icon={Trophy} />
         <StatCard label="Next Booking" value="Tomorrow" trend="08:00 AM" icon={Calendar} />
         <StatCard label="Club Notifications" value="03" trend="New Update" icon={Bell} />
       </div>
