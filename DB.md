@@ -269,19 +269,23 @@ CREATE TABLE \`payments\` (
   \`payment\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
   \`amount\` DECIMAL(10,2) NOT NULL,  
   \`payment\_date\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  \`payment\_type\` ENUM('membership', 'booking\_fee') NOT NULL,  
+  \`payment\_type\` ENUM('membership', 'booking\_fee', 'coach\_registration', 'other') NOT NULL,  
   \`member\_id\` INT(11) DEFAULT NULL,  
+  \`coach\_id\` INT(11) DEFAULT NULL, \-- Added for admin-recorded coach registration payments (manualPaymentController)  
   \`booking\_id\` INT(11) DEFAULT NULL,  
   \`verification\_id\` INT(11) DEFAULT NULL, \-- Links back to the payment\_verification row that created this ledger entry (added for the registration-approval edit/undo workflow)  
   \`handled\_by\` INT(11) NOT NULL, \-- Admin tracking compliance metric  
   \`status\` ENUM('completed', 'recorded', 'failed', 'refunded') DEFAULT 'completed',  
+  \`notes\` VARCHAR(255) DEFAULT NULL, \-- Free-text note for manually-recorded payments (e.g. "Paid via cash at front desk")  
   PRIMARY KEY (\`payment\_id\`),  
   KEY \`handled\_by\` (\`handled\_by\`),  
   KEY \`member\_id\` (\`member\_id\`),  
+  KEY \`coach\_id\` (\`coach\_id\`),  
   KEY \`booking\_id\` (\`booking\_id\`),  
   KEY \`verification\_id\` (\`verification\_id\`),  
   CONSTRAINT \`fk\_pay\_admin\` FOREIGN KEY (\`handled\_by\`) REFERENCES \`users\` (\`user\_id\`),  
   CONSTRAINT \`fk\_pay\_member\` FOREIGN KEY (\`member\_id\`) REFERENCES \`members\` (\`member\_id\`) ON DELETE SET NULL,  
+  CONSTRAINT \`fk\_pay\_coach\` FOREIGN KEY (\`coach\_id\`) REFERENCES \`coaches\` (\`coach\_id\`) ON DELETE SET NULL,  
   CONSTRAINT \`fk\_pay\_booking\` FOREIGN KEY (\`booking\_id\`) REFERENCES \`bookings\` (\`booking\_id\`) ON DELETE SET NULL,  
   CONSTRAINT \`fk\_pay\_verification\` FOREIGN KEY (\`verification\_id\`) REFERENCES \`payment\_verification\` (\`verification\_id\`) ON DELETE SET NULL  
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;

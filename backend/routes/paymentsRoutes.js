@@ -9,11 +9,14 @@ const {
     editVerification,
     undoVerification,
 } = require('../controllers/paymentVerificationController');
-const { getPayments } = require('../controllers/paymentLedgerController');
+const { getPayments, updatePayment } = require('../controllers/paymentLedgerController');
+const { createManualPayment } = require('../controllers/manualPaymentController');
 
 router.use(verifyToken, requireRole('admin'));
 
 router.get('/', getPayments);
+router.post('/manual', createManualPayment);
+router.patch('/update/:id', updatePayment);
 router.get('/pending', getPendingVerifications);
 router.get('/history', getVerificationHistory);
 router.patch('/approve/:id', approveVerification);

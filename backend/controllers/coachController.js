@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { withTransaction } = pool;
 const { hashPassword } = require('../utils/password');
+const { createCoachAccount } = require('../utils/coachAccount');
 
 const getCoaches = async (req, res) => {
     try {
@@ -22,21 +23,9 @@ const createCoach = async (req, res) => {
     }
 
     try {
-        const coach_id = await withTransaction(async (connection) => {
+        const { coach_id } = await withTransaction(async (connection) => {
             const password_hash = await hashPassword(password);
-
-            const [userResult] = await connection.query(
-                "INSERT INTO users (username, password_hash, role, status) VALUES (?, ?, 'coach', 'active')",
-                [username, password_hash]
-            );
-
-            const [coachResult] = await connection.query(
-                `INSERT INTO coaches (user_id, full_name, email, phone, specialization, experience_years, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [userResult.insertId, full_name, email, phone, specialization || null, experience_years || 0, status || 'active']
-            );
-
-            return coachResult.insertId;
+            return createCoachAccount(connection, { username, password_hash, full_name, email, phone, specialization, experience_years, status });
         });
 
         res.status(201).json({ message: 'Coach created.', coach_id });

@@ -1,28 +1,122 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Search, Filter, Trophy, CreditCard } from 'lucide-react';
+import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
+import Modal from '../../components/common/Modal';
+
+const PAYMENT_TYPE_ICON = {
+    membership: Wallet,
+    booking_fee: Trophy,
+    coach_registration: UserCheck,
+    other: Receipt,
+};
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const emptyFormData = () => ({
+    purpose: 'new_member',
+    amount: '',
+    payment_date: todayISO(),
+    notes: '',
+    username: '', password: '', full_name: '', email: '', phone: '',
+    membership_type_id: '', start_date: todayISO(),
+    specialization: '', experience_years: 0,
+    member_id: '',
+});
 
 const AdminPayments = () => {
     const [payments, setPayments] = useState([]);
     const [filters, setFilters] = useState({ type: '', date: '', search: '' });
     const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [formData, setFormData] = useState(emptyFormData);
+    const [membershipTypes, setMembershipTypes] = useState([]);
+    const [members, setMembers] = useState([]);
+    const [editingPayment, setEditingPayment] = useState(null);
+    const [editForm, setEditForm] = useState({ amount: '', payment_date: '', notes: '', status: 'completed' });
 
-    useEffect(() => { fetchPayments(); }, [filters]);
-
-    const fetchPayments = async () => {
+    const buildPaymentsQuery = () => {
         const params = new URLSearchParams();
         if (filters.type) params.append('type', filters.type);
         if (filters.date) params.append('date', filters.date);
         if (filters.search) params.append('search', filters.search);
+        return params.toString();
+    };
 
-        const res = await apiFetch(`/api/payments?${params.toString()}`);
+    const fetchPayments = async () => {
+        const res = await apiFetch(`/api/payments?${buildPaymentsQuery()}`);
         const data = await res.json();
         setPayments(data.data || []);
         setLoading(false);
     };
 
+    useEffect(() => {
+        apiFetch(`/api/payments?${buildPaymentsQuery()}`)
+            .then((res) => res.json())
+            .then((data) => setPayments(data.data || []))
+            .finally(() => setLoading(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filters]);
+
+    useEffect(() => {
+        apiFetch('/api/membership-types').then((res) => res.json()).then((data) => setMembershipTypes(data.data || []));
+        apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
+    }, []);
+
     const handleFilterChange = (e) => {
         setFilters({ ...filters, [e.target.name]: e.target.value });
+    };
+
+    const handleOpenModal = () => {
+        setFormData(emptyFormData());
+        setIsModalOpen(true);
+    };
+
+    const handlePlanChange = (e) => {
+        const membership_type_id = e.target.value;
+        const plan = membershipTypes.find((t) => String(t.membership_type_id) === membership_type_id);
+        setFormData({ ...formData, membership_type_id, amount: plan ? plan.price : formData.amount });
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const res = await apiFetch('/api/payments/manual', {
+            method: 'POST',
+            body: JSON.stringify(formData),
+        });
+
+        if (res.ok) {
+            setIsModalOpen(false);
+            fetchPayments();
+        } else {
+            const err = await res.json();
+            alert(err.message || 'Failed to record payment.');
+        }
+    };
+
+    const handleOpenEdit = (payment) => {
+        setEditingPayment(payment);
+        setEditForm({
+            amount: payment.amount,
+            payment_date: new Date(payment.payment_date).toISOString().slice(0, 10),
+            notes: payment.notes || '',
+            status: payment.status,
+        });
+    };
+
+    const handleEditSubmit = async (e) => {
+        e.preventDefault();
+        const res = await apiFetch(`/api/payments/update/${editingPayment.payment_id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(editForm),
+        });
+
+        if (res.ok) {
+            setEditingPayment(null);
+            fetchPayments();
+        } else {
+            const err = await res.json();
+            alert(err.message || 'Failed to update payment.');
+        }
     };
 
     return (
@@ -46,6 +140,8 @@ const AdminPayments = () => {
                                 <option value="">All Types</option>
                                 <option value="membership">Membership</option>
                                 <option value="booking_fee">Booking Fee</option>
+                                <option value="coach_registration">Coach Registration</option>
+                                <option value="other">Other</option>
                             </select>
                         </div>
 
@@ -68,6 +164,13 @@ const AdminPayments = () => {
                                 className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:ring-4 focus:ring-slate-900/5 w-48"
                             />
                         </div>
+
+                        <button
+                            onClick={handleOpenModal}
+                            className="flex items-center justify-center gap-2 text-[10px] bg-slate-900 text-white font-black px-4 py-2.5 rounded-xl uppercase tracking-widest hover:bg-slate-800 transition-all"
+                        >
+                            <Plus size={14} /> Add Payment
+                        </button>
                     </div>
                 </div>
 
@@ -80,41 +183,60 @@ const AdminPayments = () => {
                                 <th className="p-4 font-black">Amount</th>
                                 <th className="p-4 font-black">Date</th>
                                 <th className="p-4 font-black">Status</th>
+                                <th className="p-4 font-black">Recorded By</th>
+                                <th className="p-4 font-black text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {payments.map((p) => (
-                                <tr key={p.payment_id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                                                {p.payment_type === 'membership' ? <Wallet size={16} /> : <Trophy size={16} />}
+                            {payments.map((p) => {
+                                const Icon = PAYMENT_TYPE_ICON[p.payment_type] || CreditCard;
+                                return (
+                                    <tr key={p.payment_id} className="hover:bg-slate-50 group transition-colors">
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                                    <Icon size={16} />
+                                                </div>
+                                                <p className="text-slate-900 text-sm font-bold">{p.payer_name || 'Unknown'}</p>
                                             </div>
-                                            <p className="text-slate-900 text-sm font-bold">{p.payer_name || 'Unknown'}</p>
-                                        </div>
-                                    </td>
-                                    <td className="p-4">
-                                        <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-slate-50 text-slate-600 border-slate-100">
-                                            {p.payment_type.replace('_', ' ')}
-                                        </span>
-                                    </td>
-                                    <td className="p-4">
-                                        <p className="text-slate-900 text-sm font-bold font-mono">LKR {p.amount}</p>
-                                    </td>
-                                    <td className="p-4">
-                                        <p className="text-[11px] text-slate-600 font-medium">{new Date(p.payment_date).toLocaleString()}</p>
-                                    </td>
-                                    <td className="p-4">
-                                        <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full border ${
-                                            p.status === 'completed' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' :
-                                            p.status === 'refunded' ? 'text-rose-600 bg-rose-50 border-rose-100' :
-                                            'text-amber-600 bg-amber-50 border-amber-100'
-                                        }`}>
-                                            {p.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
+                                        </td>
+                                        <td className="p-4">
+                                            <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-slate-50 text-slate-600 border-slate-100">
+                                                {p.payment_type.replace('_', ' ')}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
+                                            <p className="text-slate-900 text-sm font-bold font-mono">LKR {p.amount}</p>
+                                        </td>
+                                        <td className="p-4">
+                                            <p className="text-[11px] text-slate-600 font-medium">{new Date(p.payment_date).toLocaleString()}</p>
+                                            {p.notes && (
+                                                <p className="text-[10px] text-slate-400 mt-0.5 max-w-[200px] truncate" title={p.notes}>{p.notes}</p>
+                                            )}
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full border ${
+                                                p.status === 'completed' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' :
+                                                p.status === 'refunded' ? 'text-rose-600 bg-rose-50 border-rose-100' :
+                                                'text-amber-600 bg-amber-50 border-amber-100'
+                                            }`}>
+                                                {p.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-medium">
+                                                <ShieldCheck size={12} className="text-slate-400" />
+                                                {p.handled_by_username || '—'}
+                                            </div>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <button onClick={() => handleOpenEdit(p)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                                <Pencil size={14} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
 
@@ -126,6 +248,189 @@ const AdminPayments = () => {
                     )}
                 </div>
             </div>
+
+            <Modal
+                isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
+                title="Add Payment"
+                submitText="Record Payment"
+                onSubmit={handleSubmit}
+            >
+                <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-slate-400">Purpose</label>
+                    <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                        value={formData.purpose} onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}>
+                        <option value="new_member">New Member Registration</option>
+                        <option value="new_coach">New Coach Registration</option>
+                        <option value="misc">Miscellaneous</option>
+                    </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Amount (LKR)</label>
+                        <input type="number" step="0.01" min="0.01" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                            value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} required />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Payment Date</label>
+                        <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                            value={formData.payment_date} onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })} required />
+                    </div>
+                </div>
+
+                {formData.purpose === 'new_member' && (
+                    <>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Username</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} required />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Password</label>
+                                <input type="password" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400">Full Name</label>
+                            <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Email</label>
+                                <input type="email" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Phone</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Membership Plan</label>
+                                <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.membership_type_id} onChange={handlePlanChange} required>
+                                    <option value="" disabled>Select a plan...</option>
+                                    {membershipTypes.map((t) => (
+                                        <option key={t.membership_type_id} value={t.membership_type_id}>
+                                            {t.name} — LKR {t.price} / {t.duration_months}mo
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Start Date</label>
+                                <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} required />
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {formData.purpose === 'new_coach' && (
+                    <>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Username</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} required />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Password</label>
+                                <input type="password" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400">Full Name</label>
+                            <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Email</label>
+                                <input type="email" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Phone</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Specialization</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.specialization} onChange={(e) => setFormData({ ...formData, specialization: e.target.value })} />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Experience (Years)</label>
+                                <input type="number" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.experience_years} onChange={(e) => setFormData({ ...formData, experience_years: parseInt(e.target.value) || 0 })} />
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {formData.purpose === 'misc' && (
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Link to Member (optional)</label>
+                        <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                            value={formData.member_id} onChange={(e) => setFormData({ ...formData, member_id: e.target.value })}>
+                            <option value="">No member (unlinked)</option>
+                            {members.map((m) => (
+                                <option key={m.member_id} value={m.member_id}>{m.full_name} — {m.email}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-slate-400">Notes (optional)</label>
+                    <textarea className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" rows={2}
+                        value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} />
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={!!editingPayment} onClose={() => setEditingPayment(null)}
+                title="Edit Payment"
+                submitText="Save Changes"
+                onSubmit={handleEditSubmit}
+            >
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Amount (LKR)</label>
+                        <input type="number" step="0.01" min="0.01" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                            value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} required />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Payment Date</label>
+                        <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                            value={editForm.payment_date} onChange={(e) => setEditForm({ ...editForm, payment_date: e.target.value })} required />
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-slate-400">Status</label>
+                    <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                        value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
+                        <option value="completed">Completed</option>
+                        <option value="recorded">Recorded</option>
+                        <option value="failed">Failed</option>
+                        <option value="refunded">Refunded</option>
+                    </select>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-slate-400">Notes</label>
+                    <textarea className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" rows={2}
+                        value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+                </div>
+            </Modal>
         </div>
     );
 };

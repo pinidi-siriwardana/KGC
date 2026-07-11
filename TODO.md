@@ -32,6 +32,7 @@ Grounded in the schema in `DB.md` and the current state of `frontend/` and `back
 - [x] `GET /api/payments` ledger listing with `type`/`date`/`search` filters
 - [x] `GET /api/payments/history` + edit (`/edit/:id`) + undo (`/undo/:id`) for reviewed verifications — undo on an approved registration hard-deletes the created account
 - [ ] Booking-type verifications still only get a status update, no cascade (booking creation itself isn't built — see Module 4)
+- [x] `POST /api/payments/manual` — admin-recorded payment (no receipt/verification queue) for a walk-in New Member (creates `users`+`members`+`memberships`+`payments`), New Coach (creates `users`+`coaches`+`payments`), or a Miscellaneous charge (optionally linked to an existing member); `payments.payment_type` extended with `coach_registration`/`other`, plus `coach_id` and `notes` columns
 - [ ] Inquiries — sidebar has a nav entry but no table/endpoint exists yet; needs schema + API
 
 See `backend/API_DOCS.md` for the full endpoint reference.
