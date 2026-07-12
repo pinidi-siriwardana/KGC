@@ -44,7 +44,9 @@ const MainContent = () => {
   const location = useLocation();
 
   // 1. Updated Logic: Hide public layout for Login, Register, AND any Admin route
-  const isDashboard = location.pathname.startsWith('/admin') || location.pathname.startsWith('/member') || location.pathname.startsWith('/coach') ;
+  // Trailing slash matters here — '/membership' starts with '/member' too, which
+  // was wrongly hiding the public Membership page's navbar/footer.
+  const isDashboard = location.pathname.startsWith('/admin/') || location.pathname.startsWith('/member/') || location.pathname.startsWith('/coach/');
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
   const hidePublicLayout = isDashboard || isAuthPage;
