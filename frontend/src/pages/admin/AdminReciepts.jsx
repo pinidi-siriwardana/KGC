@@ -10,8 +10,6 @@ const ReceiptReview = () => {
     const [editingEntry, setEditingEntry] = useState(null);
     const [editForm, setEditForm] = useState({ remarks: '', amount_declared: '' });
 
-    useEffect(() => { fetchSlips(); fetchHistory(); }, []);
-
     const fetchSlips = async () => {
         const res = await apiFetch('/api/payments/pending');
         const data = await res.json();
@@ -24,6 +22,11 @@ const ReceiptReview = () => {
         const data = await res.json();
         setHistory(data);
     };
+
+    useEffect(() => {
+        apiFetch('/api/payments/pending').then((res) => res.json()).then((data) => { setSlips(data); setLoading(false); });
+        apiFetch('/api/payments/history').then((res) => res.json()).then((data) => setHistory(data));
+    }, []);
 
     const handleApproval = async (id, status) => {
         const endpoint = status === 'approved' ? 'approve' : 'reject';
@@ -117,8 +120,19 @@ const ReceiptReview = () => {
                                     <span className="px-2 py-1 rounded bg-slate-800 text-[9px] font-black uppercase tracking-widest text-slate-400">{slip.payment_type}</span>
                                     <p className="text-emerald-400 font-mono font-bold">LKR {slip.amount_declared}</p>
                                 </div>
+                                {slip.settles_payment_id && (
+                                    <span className="inline-block mt-3 px-2 py-1 rounded bg-amber-500/10 text-amber-400 text-[9px] font-black uppercase tracking-widest border border-amber-500/20">
+                                        Settling outstanding fee #{slip.settles_payment_id}
+                                    </span>
+                                )}
                                 <h3 className="text-lg font-bold text-white mt-4">{slip.full_name || 'Guest User'}</h3>
                                 <p className="text-slate-500 text-xs font-medium">{slip.email || 'No Email Provided'}</p>
+                                {slip.requested_plan_name && (
+                                    <p className="text-amber-400 text-xs font-bold mt-2">Requested plan: {slip.requested_plan_name}</p>
+                                )}
+                                {slip.note && (
+                                    <p className="text-slate-400 text-xs italic mt-2">"{slip.note}"</p>
+                                )}
                             </div>
 
                             <div className="flex gap-3 mt-8">

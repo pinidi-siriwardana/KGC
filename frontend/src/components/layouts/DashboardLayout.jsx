@@ -48,6 +48,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
       ]},
       { group: "Account", items: [
         { name: 'Membership Info', icon: Trophy, path: '/member/status' },
+        { name: 'My Payments', icon: CreditCard, path: '/member/payments' },
         { name: 'Profile Settings', icon: UserCog, path: '/member/profile' },
       ]}
     ],

@@ -4,13 +4,17 @@ const { createMemberAccount } = require('../utils/memberAccount');
 
 const VERIFICATION_JOIN_QUERY = `
     SELECT pv.*,
-           COALESCE(rr.full_name, m.full_name, g.full_name) AS full_name,
-           COALESCE(rr.email, m.email, g.email) AS email
+           COALESCE(rr.full_name, m.full_name, m2.full_name, c2.full_name, g.full_name) AS full_name,
+           COALESCE(rr.email, m.email, m2.email, c2.email, g.email) AS email,
+           mt.name AS requested_plan_name
     FROM payment_verification pv
     LEFT JOIN registration_requests rr ON pv.request_id = rr.request_id
     LEFT JOIN bookings b ON pv.booking_id = b.booking_id
     LEFT JOIN members m ON b.member_id = m.member_id
     LEFT JOIN guests g ON b.guest_id = g.guest_id
+    LEFT JOIN members m2 ON pv.member_id = m2.member_id
+    LEFT JOIN coaches c2 ON pv.coach_id = c2.coach_id
+    LEFT JOIN membership_types mt ON pv.membership_type_id = mt.membership_type_id
 `;
 
 const getPendingVerifications = async (req, res) => {
@@ -121,6 +125,97 @@ const reviewOther = async (connection, status, verification, reviewerId, remarks
     );
 };
 
+// Extends (or starts) a member's membership using the plan they picked when
+// submitting the renewal. Starts from today if they have no membership or
+// it's already expired, otherwise extends from the current end_date so an
+// early renewal doesn't forfeit already-paid-for time.
+const approveMembershipRenewal = async (connection, verification, reviewerId, remarks) => {
+    if (!verification.member_id) throw new Error('This verification has no linked member.');
+
+    const [[membershipType]] = await connection.query(
+        'SELECT duration_months, price FROM membership_types WHERE membership_type_id = ?',
+        [verification.membership_type_id]
+    );
+    if (!membershipType) {
+        const err = new Error('Invalid or missing membership_type_id on this verification.');
+        err.statusCode = 400;
+        throw err;
+    }
+
+    const [[current]] = await connection.query(
+        'SELECT end_date FROM memberships WHERE member_id = ? ORDER BY start_date DESC, membership_id DESC LIMIT 1',
+        [verification.member_id]
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    const startDate = current && current.end_date > today ? current.end_date : today;
+
+    await connection.query(
+        `INSERT INTO memberships (member_id, membership_type_id, purchase_price, start_date, end_date, status)
+         VALUES (?, ?, ?, ?, DATE_ADD(?, INTERVAL ? MONTH), 'active')`,
+        [verification.member_id, verification.membership_type_id, membershipType.price, startDate, startDate, membershipType.duration_months]
+    );
+
+    await connection.query(
+        `INSERT INTO payments (amount, payment_type, member_id, verification_id, handled_by, status, notes)
+         VALUES (?, 'membership', ?, ?, ?, 'completed', ?)`,
+        [verification.amount_declared, verification.member_id, verification.verification_id, reviewerId, verification.note]
+    );
+
+    await connection.query(
+        "UPDATE payment_verification SET status = 'approved', reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE verification_id = ?",
+        [reviewerId, remarks || null, verification.verification_id]
+    );
+};
+
+// Donation / tournament fee: just logs the payment against whichever of
+// member/coach submitted it, no further cascade.
+const approveMemberPayment = async (connection, verification, reviewerId, remarks) => {
+    if (!verification.member_id && !verification.coach_id) {
+        throw new Error('This verification has no linked member or coach.');
+    }
+
+    await connection.query(
+        `INSERT INTO payments (amount, payment_type, member_id, coach_id, verification_id, handled_by, status, notes)
+         VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)`,
+        [verification.amount_declared, verification.payment_type, verification.member_id, verification.coach_id, verification.verification_id, reviewerId, verification.note]
+    );
+
+    await connection.query(
+        "UPDATE payment_verification SET status = 'approved', reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE verification_id = ?",
+        [reviewerId, remarks || null, verification.verification_id]
+    );
+};
+
+// Settling a specific outstanding fee (e.g. a self-cancellation fee) updates
+// that exact payments row in place rather than inserting a new one — the
+// obligation already exists, this just marks it collected.
+const approveFeeSettlement = async (connection, verification, reviewerId, remarks) => {
+    const [[payment]] = await connection.query(
+        'SELECT payment_id, status FROM payments WHERE payment_id = ? FOR UPDATE',
+        [verification.settles_payment_id]
+    );
+    if (!payment) {
+        const err = new Error('The payment this submission settles no longer exists.');
+        err.statusCode = 404;
+        throw err;
+    }
+    if (payment.status !== 'recorded') {
+        const err = new Error(`This fee is already ${payment.status}.`);
+        err.statusCode = 409;
+        throw err;
+    }
+
+    await connection.query(
+        "UPDATE payments SET status = 'completed', handled_by = ?, verification_id = ? WHERE payment_id = ?",
+        [reviewerId, verification.verification_id, payment.payment_id]
+    );
+
+    await connection.query(
+        "UPDATE payment_verification SET status = 'approved', reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE verification_id = ?",
+        [reviewerId, remarks || null, verification.verification_id]
+    );
+};
+
 const reviewVerification = (status) => async (req, res) => {
     const { id } = req.params;
     const { remarks } = req.body;
@@ -136,10 +231,26 @@ const reviewVerification = (status) => async (req, res) => {
         }
 
         const result = await withTransaction(async (connection) => {
+            if (status === 'approved') {
+                // Settlement is orthogonal to payment_type — a submission
+                // paying off an existing outstanding fee, checked first.
+                if (verification.settles_payment_id) {
+                    return approveFeeSettlement(connection, verification, req.user.user_id, remarks);
+                }
+                if (verification.payment_type === 'registration') {
+                    return approveRegistration(connection, verification, req.user.user_id, remarks);
+                }
+                if (verification.payment_type === 'membership_renewal') {
+                    return approveMembershipRenewal(connection, verification, req.user.user_id, remarks);
+                }
+                if (['donation', 'tournament_fee'].includes(verification.payment_type)) {
+                    return approveMemberPayment(connection, verification, req.user.user_id, remarks);
+                }
+                return reviewOther(connection, status, verification, req.user.user_id, remarks);
+            }
+
             if (verification.payment_type === 'registration') {
-                return status === 'approved'
-                    ? approveRegistration(connection, verification, req.user.user_id, remarks)
-                    : rejectRegistration(connection, verification, req.user.user_id, remarks);
+                return rejectRegistration(connection, verification, req.user.user_id, remarks);
             }
             return reviewOther(connection, status, verification, req.user.user_id, remarks);
         });

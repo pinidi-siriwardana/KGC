@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck, Ban } from 'lucide-react';
+import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck, Ban, CircleCheck, CircleSlash, Heart, Landmark } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 
@@ -9,6 +9,8 @@ const PAYMENT_TYPE_ICON = {
     coach_registration: UserCheck,
     other: Receipt,
     cancellation_fee: Ban,
+    donation: Heart,
+    tournament_fee: Trophy,
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -34,6 +36,10 @@ const AdminPayments = () => {
     const [members, setMembers] = useState([]);
     const [editingPayment, setEditingPayment] = useState(null);
     const [editForm, setEditForm] = useState({ amount: '', payment_date: '', notes: '', status: 'completed' });
+    const [settings, setSettings] = useState(null);
+    const [editingSettings, setEditingSettings] = useState(false);
+    const [settingsForm, setSettingsForm] = useState({});
+    const [savingSettings, setSavingSettings] = useState(false);
 
     const buildPaymentsQuery = () => {
         const params = new URLSearchParams();
@@ -61,7 +67,35 @@ const AdminPayments = () => {
     useEffect(() => {
         apiFetch('/api/membership-types').then((res) => res.json()).then((data) => setMembershipTypes(data.data || []));
         apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
+        apiFetch('/api/settings').then((res) => res.json()).then((data) => setSettings(data.data || null));
     }, []);
+
+    const handleEditSettings = () => {
+        setSettingsForm({
+            bank_name: settings?.bank_name || '',
+            account_name: settings?.account_name || '',
+            account_number: settings?.account_number || '',
+            branch: settings?.branch || '',
+            payment_instructions: settings?.payment_instructions || '',
+        });
+        setEditingSettings(true);
+    };
+
+    const handleSaveSettings = async () => {
+        setSavingSettings(true);
+        const res = await apiFetch('/api/settings', {
+            method: 'PATCH',
+            body: JSON.stringify(settingsForm),
+        });
+        setSavingSettings(false);
+        if (res.ok) {
+            setSettings({ ...settings, ...settingsForm });
+            setEditingSettings(false);
+        } else {
+            const err = await res.json();
+            alert(err.message || 'Failed to update payment details.');
+        }
+    };
 
     const handleFilterChange = (e) => {
         setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -120,8 +154,98 @@ const AdminPayments = () => {
         }
     };
 
+    const handleQuickStatus = async (payment, status) => {
+        if (status === 'waived' && !window.confirm('Waive this fee? The member/coach will no longer owe this amount.')) return;
+
+        const res = await apiFetch(`/api/payments/update/${payment.payment_id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+
+        if (res.ok) {
+            fetchPayments();
+        } else {
+            const err = await res.json();
+            alert(err.message || 'Failed to update payment.');
+        }
+    };
+
     return (
         <div className="p-6 space-y-6">
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Landmark size={16} className="text-slate-400" />
+                        <h2 className="text-slate-900 text-xs font-black uppercase tracking-[0.3em]">Club Payment Details</h2>
+                    </div>
+                    {!editingSettings && (
+                        <button onClick={handleEditSettings} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                            <Pencil size={14} />
+                        </button>
+                    )}
+                </div>
+
+                {editingSettings ? (
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Bank Name</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={settingsForm.bank_name} onChange={(e) => setSettingsForm({ ...settingsForm, bank_name: e.target.value })} />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Account Name</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={settingsForm.account_name} onChange={(e) => setSettingsForm({ ...settingsForm, account_name: e.target.value })} />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Account Number</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={settingsForm.account_number} onChange={(e) => setSettingsForm({ ...settingsForm, account_number: e.target.value })} />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Branch</label>
+                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={settingsForm.branch} onChange={(e) => setSettingsForm({ ...settingsForm, branch: e.target.value })} />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400">Instructions shown to members</label>
+                            <textarea rows={2} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                value={settingsForm.payment_instructions} onChange={(e) => setSettingsForm({ ...settingsForm, payment_instructions: e.target.value })} />
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={handleSaveSettings} disabled={savingSettings}
+                                className="text-[9px] font-black uppercase tracking-widest bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-all disabled:opacity-50">
+                                {savingSettings ? 'Saving...' : 'Save'}
+                            </button>
+                            <button onClick={() => setEditingSettings(false)} className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-4 py-2">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-slate-400">Bank</p>
+                            <p className="text-slate-900 font-bold">{settings?.bank_name || '—'}</p>
+                        </div>
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-slate-400">Account Name</p>
+                            <p className="text-slate-900 font-bold">{settings?.account_name || '—'}</p>
+                        </div>
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-slate-400">Account Number</p>
+                            <p className="text-slate-900 font-bold font-mono">{settings?.account_number || '—'}</p>
+                        </div>
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-slate-400">Branch</p>
+                            <p className="text-slate-900 font-bold">{settings?.branch || '—'}</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-50/50">
                     <div>
@@ -143,6 +267,8 @@ const AdminPayments = () => {
                                 <option value="booking_fee">Booking Fee</option>
                                 <option value="coach_registration">Coach Registration</option>
                                 <option value="cancellation_fee">Cancellation Fee</option>
+                                <option value="donation">Donation</option>
+                                <option value="tournament_fee">Tournament Fee</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
@@ -220,6 +346,7 @@ const AdminPayments = () => {
                                             <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full border ${
                                                 p.status === 'completed' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' :
                                                 p.status === 'refunded' ? 'text-rose-600 bg-rose-50 border-rose-100' :
+                                                p.status === 'waived' ? 'text-slate-500 bg-slate-100 border-slate-200' :
                                                 'text-amber-600 bg-amber-50 border-amber-100'
                                             }`}>
                                                 {p.status}
@@ -232,9 +359,24 @@ const AdminPayments = () => {
                                             </div>
                                         </td>
                                         <td className="p-4 text-right">
-                                            <button onClick={() => handleOpenEdit(p)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
-                                                <Pencil size={14} />
-                                            </button>
+                                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                {p.status === 'recorded' && (
+                                                    <>
+                                                        <button onClick={() => handleQuickStatus(p, 'completed')} title="Mark as Paid"
+                                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                                                            <CircleCheck size={14} />
+                                                        </button>
+                                                        <button onClick={() => handleQuickStatus(p, 'waived')} title="Waive Fee"
+                                                            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg">
+                                                            <CircleSlash size={14} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                <button onClick={() => handleOpenEdit(p)} title="Edit"
+                                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                                                    <Pencil size={14} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -425,6 +567,7 @@ const AdminPayments = () => {
                         <option value="recorded">Recorded</option>
                         <option value="failed">Failed</option>
                         <option value="refunded">Refunded</option>
+                        <option value="waived">Waived</option>
                     </select>
                 </div>
                 <div className="space-y-1">
