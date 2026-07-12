@@ -119,4 +119,21 @@ const payOutstandingFee = async (req, res) => {
     }
 };
 
-module.exports = { getMyPayments, submitPayment, payOutstandingFee };
+// Mirrors memberPaymentController.getDuesSummary, scoped to coach_id.
+const getDuesSummary = async (req, res) => {
+    try {
+        const coach_id = await resolveCoachId(req.user.user_id);
+        if (!coach_id) return res.json({ hasDues: false, totalDue: 0, count: 0 });
+
+        const [[row]] = await pool.query(
+            "SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM payments WHERE coach_id = ? AND status = 'recorded'",
+            [coach_id]
+        );
+
+        res.json({ hasDues: row.count > 0, totalDue: row.total, count: row.count });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to fetch dues summary.', error: err.message });
+    }
+};
+
+module.exports = { getMyPayments, submitPayment, payOutstandingFee, getDuesSummary };

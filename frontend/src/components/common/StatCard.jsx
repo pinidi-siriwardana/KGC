@@ -8,8 +8,8 @@ const StatCard = ({ label, value, trend, icon: Icon }) => (
       </div>
       <span className="text-[10px] font-black text-emerald uppercase tracking-widest">{trend}</span>
     </div>
-    <p className="text-muted text-[10px] uppercase tracking-widest font-black mb-1">{label}</p>
-    <h3 className="text-white text-3xl font-serif">{value}</h3>
+    <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black mb-1">{label}</p>
+    <h3 className="text-slate-900 text-3xl font-serif">{value}</h3>
   </div>
 );
 

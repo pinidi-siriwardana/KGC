@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Wallet, Trophy, UserCheck, Receipt, Ban, Heart, FileUp, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Plus, Wallet, Trophy, UserCheck, Receipt, Ban, Heart, FileUp, CheckCircle2, ExternalLink, UserX } from 'lucide-react';
 import { apiFetch, API_URL } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 
@@ -11,6 +11,7 @@ const PAYMENT_TYPE_ICON = {
     cancellation_fee: Ban,
     donation: Heart,
     tournament_fee: Trophy,
+    no_show_fee: UserX,
 };
 
 const STATUS_STYLE = {
@@ -172,7 +173,7 @@ const CoachPayments = () => {
                                                     <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
                                                         <Icon size={16} />
                                                     </div>
-                                                    <span className="text-slate-900 text-sm font-bold capitalize">{p.payment_type.replace('_', ' ')}</span>
+                                                    <span className="text-slate-900 text-sm font-bold capitalize">{p.payment_type.replace(/_/g, ' ')}</span>
                                                 </div>
                                                 {p.notes && <p className="text-[10px] text-slate-400 mt-1 ml-11">{p.notes}</p>}
                                             </td>
@@ -210,7 +211,7 @@ const CoachPayments = () => {
                         {requests.map((r) => (
                             <div key={r.verification_id} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl">
                                 <div>
-                                    <p className="text-slate-900 text-sm font-bold capitalize">{r.payment_type.replace('_', ' ')}</p>
+                                    <p className="text-slate-900 text-sm font-bold capitalize">{r.payment_type.replace(/_/g, ' ')}</p>
                                     <p className="text-slate-500 text-[10px] uppercase">
                                         LKR {r.amount_declared} • Submitted {new Date(r.submitted_at).toLocaleDateString()}
                                     </p>
@@ -260,7 +261,7 @@ const CoachPayments = () => {
                         {payingFee ? (
                             <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                                 <p className="text-[9px] font-black uppercase text-slate-400">Settling</p>
-                                <p className="text-slate-900 text-sm font-bold capitalize">{payingFee.payment_type.replace('_', ' ')}</p>
+                                <p className="text-slate-900 text-sm font-bold capitalize">{payingFee.payment_type.replace(/_/g, ' ')}</p>
                                 <p className="text-slate-900 text-lg font-bold font-mono mt-1">LKR {payingFee.amount}</p>
                             </div>
                         ) : (

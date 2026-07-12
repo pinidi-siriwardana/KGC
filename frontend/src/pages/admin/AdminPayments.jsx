@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck, Ban, CircleCheck, CircleSlash, Heart, Landmark } from 'lucide-react';
+import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck, Ban, CircleCheck, CircleSlash, Heart, Landmark, UserX } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 
@@ -11,6 +11,7 @@ const PAYMENT_TYPE_ICON = {
     cancellation_fee: Ban,
     donation: Heart,
     tournament_fee: Trophy,
+    no_show_fee: UserX,
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -78,6 +79,7 @@ const AdminPayments = () => {
             branch: settings?.branch || '',
             payment_instructions: settings?.payment_instructions || '',
             guest_booking_fee: settings?.guest_booking_fee || '',
+            no_show_fee: settings?.no_show_fee || '',
         });
         setEditingSettings(true);
     };
@@ -214,6 +216,11 @@ const AdminPayments = () => {
                                 <input type="number" step="0.01" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                     value={settingsForm.guest_booking_fee} onChange={(e) => setSettingsForm({ ...settingsForm, guest_booking_fee: e.target.value })} />
                             </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">No-Show Fee (LKR)</label>
+                                <input type="number" step="0.01" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={settingsForm.no_show_fee} onChange={(e) => setSettingsForm({ ...settingsForm, no_show_fee: e.target.value })} />
+                            </div>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400">Instructions shown to members</label>
@@ -252,6 +259,10 @@ const AdminPayments = () => {
                             <p className="text-[9px] font-black uppercase text-slate-400">Guest Booking Fee</p>
                             <p className="text-slate-900 font-bold font-mono">LKR {settings?.guest_booking_fee || '—'}</p>
                         </div>
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-slate-400">No-Show Fee</p>
+                            <p className="text-slate-900 font-bold font-mono">LKR {settings?.no_show_fee || '—'}</p>
+                        </div>
                     </div>
                 )}
             </div>
@@ -277,6 +288,7 @@ const AdminPayments = () => {
                                 <option value="booking_fee">Booking Fee</option>
                                 <option value="coach_registration">Coach Registration</option>
                                 <option value="cancellation_fee">Cancellation Fee</option>
+                                <option value="no_show_fee">No-Show Fee</option>
                                 <option value="donation">Donation</option>
                                 <option value="tournament_fee">Tournament Fee</option>
                                 <option value="other">Other</option>
@@ -340,7 +352,7 @@ const AdminPayments = () => {
                                         </td>
                                         <td className="p-4">
                                             <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-slate-50 text-slate-600 border-slate-100">
-                                                {p.payment_type.replace('_', ' ')}
+                                                {p.payment_type.replace(/_/g, ' ')}
                                             </span>
                                         </td>
                                         <td className="p-4">

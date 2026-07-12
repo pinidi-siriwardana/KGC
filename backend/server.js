@@ -19,6 +19,7 @@ const announcementsRoutes = require('./routes/announcementsRoutes');
 const timeSlotsRoutes = require('./routes/timeSlotsRoutes');
 const bookingsRoutes = require('./routes/bookingsRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
 const logger = require('./middleware/logger');
 
 const app = express();
@@ -48,6 +49,7 @@ app.use('/api/announcements', announcementsRoutes);
 app.use('/api/time-slots', timeSlotsRoutes);
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 // --- Health Check ---
 app.get('/', (req, res) => {

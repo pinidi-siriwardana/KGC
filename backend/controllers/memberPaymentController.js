@@ -137,4 +137,23 @@ const payOutstandingFee = async (req, res) => {
     }
 };
 
-module.exports = { getMyPayments, submitPayment, payOutstandingFee };
+// Lightweight summary consumed by the booking page's dues warning — whether
+// this member has any unsettled fees (cancellation, no-show, etc) before
+// they confirm a new booking.
+const getDuesSummary = async (req, res) => {
+    try {
+        const member_id = await resolveMemberId(req.user.user_id);
+        if (!member_id) return res.json({ hasDues: false, totalDue: 0, count: 0 });
+
+        const [[row]] = await pool.query(
+            "SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM payments WHERE member_id = ? AND status = 'recorded'",
+            [member_id]
+        );
+
+        res.json({ hasDues: row.count > 0, totalDue: row.total, count: row.count });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to fetch dues summary.', error: err.message });
+    }
+};
+
+module.exports = { getMyPayments, submitPayment, payOutstandingFee, getDuesSummary };

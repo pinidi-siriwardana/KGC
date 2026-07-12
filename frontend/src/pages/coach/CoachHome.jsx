@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PlusCircle, Users, CreditCard, Activity, Timer } from 'lucide-react';
+import { PlusCircle, Users, CreditCard, Activity, Timer, UserCheck } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import { apiFetch } from '../../utils/api';
 
@@ -20,6 +20,14 @@ const CoachHome = () => {
   const [coach, setCoach] = useState(null);
   const [upcomingBookings, setUpcomingBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [courtStats, setCourtStats] = useState({ totalDays: 0, totalHours: 0, bestPartner: null });
+
+  useEffect(() => {
+    apiFetch('/api/attendance/my-stats')
+      .then((res) => res.json())
+      .then((data) => setCourtStats({ totalDays: data.totalDays || 0, totalHours: data.totalHours || 0, bestPartner: data.bestPartner || null }))
+      .catch(() => setCourtStats({ totalDays: 0, totalHours: 0, bestPartner: null }));
+  }, []);
 
   useEffect(() => {
     apiFetch('/api/announcements')
@@ -80,6 +88,18 @@ const CoachHome = () => {
         <StatCard label="Monthly Sessions" value="42" trend="+8% vs Last Month" icon={Activity} />
         <StatCard label="Total Students" value="12" trend="3 New Requests" icon={Users} />
         <StatCard label="Earnings" value="LKR 125k" trend="Paid to Club" icon={CreditCard} />
+        <StatCard
+          label="Hours on Court"
+          value={`${courtStats.totalHours}h`}
+          trend={`${courtStats.totalDays} day${courtStats.totalDays === 1 ? '' : 's'} played`}
+          icon={Timer}
+        />
+        <StatCard
+          label="Best Partner"
+          value={courtStats.bestPartner?.name || 'None yet'}
+          trend={courtStats.bestPartner ? `${courtStats.bestPartner.sessions} sessions together` : 'Play more to find out'}
+          icon={UserCheck}
+        />
       </div>
 
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-8">

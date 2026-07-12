@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
 import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
@@ -18,11 +18,13 @@ const MemberBook = () => {
     const [success, setSuccess] = useState('');
     const [cancellationFee, setCancellationFee] = useState(null);
     const [policyAcknowledged, setPolicyAcknowledged] = useState(false);
+    const [dues, setDues] = useState({ hasDues: false, totalDue: 0, count: 0 });
 
     useEffect(() => {
         apiFetch('/api/courts').then((res) => res.json()).then((data) => setCourts(data.data || []));
         apiFetch('/api/time-slots').then((res) => res.json()).then((data) => setSlots(data.data || []));
         apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
+        apiFetch('/api/member/payments/dues-summary').then((res) => res.json()).then((data) => setDues(data));
     }, []);
 
     const buildStateMap = (rows) => {
@@ -129,6 +131,19 @@ const MemberBook = () => {
                             <span className="font-bold text-slate-900">{pending.slot.start_time?.slice(0, 5)}–{pending.slot.end_time?.slice(0, 5)}</span>?
                         </p>
                         <p className="text-emerald-600 text-[10px] font-black uppercase tracking-widest">Included with your membership — no charge</p>
+
+                        {dues.hasDues && (
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <AlertTriangle size={14} className="text-amber-600" />
+                                    <p className="text-amber-800 text-xs font-bold">Outstanding Dues</p>
+                                </div>
+                                <p className="text-amber-700 text-[11px] leading-relaxed">
+                                    You have <span className="font-bold">LKR {dues.totalDue}</span> in unpaid fees ({dues.count} item{dues.count === 1 ? '' : 's'}).
+                                    Please settle these from My Payments or at the club office.
+                                </p>
+                            </div>
+                        )}
 
                         <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-2">
                             <p className="text-amber-800 text-xs font-bold">Cancellation Policy</p>

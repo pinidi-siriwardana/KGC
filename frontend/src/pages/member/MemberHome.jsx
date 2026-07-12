@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useOutletContext } from 'react-router-dom';
-import { PlusCircle, Calendar, Trophy, Bell, Clock } from 'lucide-react';
+import { PlusCircle, Calendar, Trophy, Bell, Clock, Timer, Users } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import { apiFetch } from '../../utils/api';
 
@@ -23,6 +23,14 @@ const MemberHome = () => {
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
   const [upcomingBookings, setUpcomingBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [courtStats, setCourtStats] = useState({ totalDays: 0, totalHours: 0, bestPartner: null });
+
+  useEffect(() => {
+    apiFetch('/api/attendance/my-stats')
+      .then((res) => res.json())
+      .then((data) => setCourtStats({ totalDays: data.totalDays || 0, totalHours: data.totalHours || 0, bestPartner: data.bestPartner || null }))
+      .catch(() => setCourtStats({ totalDays: 0, totalHours: 0, bestPartner: null }));
+  }, []);
 
   useEffect(() => {
     apiFetch('/api/announcements')
@@ -82,6 +90,18 @@ const MemberHome = () => {
           icon={Calendar}
         />
         <StatCard label="Club Notifications" value="03" trend="New Update" icon={Bell} />
+        <StatCard
+          label="Hours on Court"
+          value={`${courtStats.totalHours}h`}
+          trend={`${courtStats.totalDays} day${courtStats.totalDays === 1 ? '' : 's'} played`}
+          icon={Timer}
+        />
+        <StatCard
+          label="Best Partner"
+          value={courtStats.bestPartner?.name || 'None yet'}
+          trend={courtStats.bestPartner ? `${courtStats.bestPartner.sessions} sessions together` : 'Play more to find out'}
+          icon={Users}
+        />
       </div>
 
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
