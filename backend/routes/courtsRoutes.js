@@ -3,8 +3,8 @@ const router = express.Router();
 const { verifyToken, requireRole } = require('../middleware/auth');
 const { getAllCourts, updateCourtStatus } = require('../controllers/courtController');
 
-// Any authenticated role: lets member/coach/admin booking pages list bookable courts.
-router.get('/', verifyToken, getAllCourts);
+// Public: lets the public guest-booking page and any authenticated role list bookable courts.
+router.get('/', getAllCourts);
 
 router.use(verifyToken, requireRole('admin'));
 

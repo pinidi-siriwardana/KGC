@@ -3,29 +3,59 @@ import { slotKey } from '../../utils/bookingKey';
 
 const formatTime = (t) => (t ? t.slice(0, 5) : '');
 
-// Pure presentational court x slot grid. No data fetching — the caller owns
-// courts/slots/availability state and what happens when an open cell is
-// clicked, so this same grid is reused as-is by the member, coach, and admin
-// booking-creation pages.
-const CourtSlotGrid = ({ courts, slots, takenKeys, onSelectSlot, selectedKey }) => {
+const LABEL = { available: 'Open', locked: 'Locked', booked: 'Booked', maintenance: '—' };
+
+const LIGHT_STYLE = {
+    available: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white cursor-pointer',
+    locked: 'bg-amber-50 text-amber-600 cursor-not-allowed',
+    booked: 'bg-red-50 text-red-300 cursor-not-allowed',
+    maintenance: 'bg-slate-100 text-slate-300 cursor-not-allowed',
+};
+const LIGHT_SELECTED = 'bg-slate-900 text-white';
+const LIGHT_LEGEND = { available: 'bg-emerald-500/60', locked: 'bg-amber-500/60', booked: 'bg-red-400/60', maintenance: 'bg-slate-300' };
+const LIGHT_TEXT = { header: 'text-slate-400', headerCourt: 'text-slate-500', headerType: 'text-slate-400', time: 'text-slate-600', legend: 'text-slate-500', loading: 'text-slate-400' };
+
+const DARK_STYLE = {
+    available: 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white cursor-pointer border border-emerald-500/20',
+    locked: 'bg-amber-500/10 text-amber-400 cursor-not-allowed border border-amber-500/20',
+    booked: 'bg-red-500/10 text-red-400 cursor-not-allowed border border-red-500/20',
+    maintenance: 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5',
+};
+const DARK_SELECTED = 'bg-white text-obsidian';
+const DARK_LEGEND = { available: 'bg-emerald-500/40', locked: 'bg-amber-500/40', booked: 'bg-red-500/40', maintenance: 'bg-white/10' };
+const DARK_TEXT = { header: 'text-white/40', headerCourt: 'text-white/60', headerType: 'text-white/30', time: 'text-white/60', legend: 'text-white/40', loading: 'text-white/40' };
+
+// Pure presentational court x slot grid, shared by every booking surface —
+// guest (public), member, coach, and admin alike — so occupancy always looks
+// identical no matter who's looking at it. States: available / locked
+// (someone else mid-checkout) / booked (confirmed) / maintenance (court
+// itself unavailable). Callers own data-fetching and what clicking an open
+// cell does; only the visual theme (`dark`) differs by context.
+const CourtSlotGrid = ({ courts, slots, stateMap, onSelectSlot, selectedKey, dark = false }) => {
     if (!courts.length || !slots.length) {
+        const text = dark ? DARK_TEXT : LIGHT_TEXT;
         return (
-            <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black py-10 text-center">
+            <p className={`${text.loading} text-[10px] uppercase tracking-widest font-black py-10 text-center`}>
                 Loading courts and time slots...
             </p>
         );
     }
+
+    const STYLE = dark ? DARK_STYLE : LIGHT_STYLE;
+    const SELECTED = dark ? DARK_SELECTED : LIGHT_SELECTED;
+    const LEGEND = dark ? DARK_LEGEND : LIGHT_LEGEND;
+    const text = dark ? DARK_TEXT : LIGHT_TEXT;
 
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-left border-separate border-spacing-1">
                 <thead>
                     <tr>
-                        <th className="p-2 text-[9px] font-black uppercase text-slate-400 tracking-widest text-left">Time</th>
+                        <th className={`p-2 text-[9px] font-black uppercase ${text.header} tracking-widest text-left`}>Time</th>
                         {courts.map((court) => (
-                            <th key={court.court_id} className="p-2 text-[9px] font-black uppercase text-slate-500 tracking-widest text-center">
+                            <th key={court.court_id} className={`p-2 text-[9px] font-black uppercase ${text.headerCourt} tracking-widest text-center`}>
                                 {court.court_name}
-                                <span className="block text-[8px] text-slate-400 font-medium normal-case">{court.court_type}</span>
+                                <span className={`block text-[8px] ${text.headerType} font-medium normal-case`}>{court.court_type}</span>
                             </th>
                         ))}
                     </tr>
@@ -33,33 +63,26 @@ const CourtSlotGrid = ({ courts, slots, takenKeys, onSelectSlot, selectedKey }) 
                 <tbody>
                     {slots.map((slot) => (
                         <tr key={slot.slot_id}>
-                            <td className="p-2 text-[10px] font-bold text-slate-600 whitespace-nowrap">
+                            <td className={`p-2 text-[10px] font-bold ${text.time} whitespace-nowrap`}>
                                 {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                             </td>
                             {courts.map((court) => {
                                 const key = slotKey(court.court_id, slot.slot_id);
                                 const courtUnavailable = court.status !== 'available' || !court.is_active;
-                                const taken = takenKeys.has(key);
+                                const state = courtUnavailable ? 'maintenance' : (stateMap[key] || 'available');
                                 const isSelected = selectedKey === key;
-                                const disabled = courtUnavailable || taken;
 
                                 return (
                                     <td key={court.court_id} className="p-0.5">
                                         <button
                                             type="button"
-                                            disabled={disabled}
+                                            disabled={state !== 'available'}
                                             onClick={() => onSelectSlot(court, slot)}
                                             className={`w-full h-9 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
-                                                isSelected
-                                                    ? 'bg-slate-900 text-white'
-                                                    : courtUnavailable
-                                                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                                                    : taken
-                                                    ? 'bg-red-50 text-red-300 cursor-not-allowed'
-                                                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white cursor-pointer'
+                                                isSelected ? SELECTED : STYLE[state]
                                             }`}
                                         >
-                                            {courtUnavailable ? '—' : taken ? 'Taken' : 'Open'}
+                                            {isSelected ? 'Selected' : LABEL[state]}
                                         </button>
                                     </td>
                                 );
@@ -68,6 +91,20 @@ const CourtSlotGrid = ({ courts, slots, takenKeys, onSelectSlot, selectedKey }) 
                     ))}
                 </tbody>
             </table>
+
+            <div className={`flex flex-wrap gap-4 mt-6 pt-6 border-t ${dark ? 'border-white/5' : 'border-slate-100'}`}>
+                {[
+                    ['available', 'Available'],
+                    ['locked', 'Locked (payment pending)'],
+                    ['booked', 'Booked'],
+                    ['maintenance', 'Maintenance'],
+                ].map(([key, label]) => (
+                    <div key={key} className="flex items-center gap-2">
+                        <span className={`w-3 h-3 rounded ${LEGEND[key]}`} />
+                        <span className={`text-[9px] font-bold uppercase tracking-widest ${text.legend}`}>{label}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };

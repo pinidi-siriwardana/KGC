@@ -1,10 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken } = require('../middleware/auth');
 const { getAllTimeSlots } = require('../controllers/timeSlotController');
 
-router.use(verifyToken);
-
+// Public: lets the public guest-booking page and any authenticated role list time slots.
 router.get('/', getAllTimeSlots);
 
 module.exports = router;

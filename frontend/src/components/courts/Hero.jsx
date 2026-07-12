@@ -36,9 +36,9 @@ const ShadowCourtHero = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-8 pt-4">
-              {/* PRIMARY ACTION: Scroll to Contact/Booking */}
-              <Link 
-                to="/#contact"
+              {/* PRIMARY ACTION: Jump to the booking grid below */}
+              <Link
+                to="/courts#book"
                 className="bg-white text-obsidian px-10 py-5 rounded-2xl text-[11px] font-black uppercase tracking-registry hover:bg-emerald hover:text-white transition-all duration-500 shadow-2xl shadow-white/5 flex items-center gap-3 group no-underline"
               >
                 Book A Court

@@ -216,6 +216,51 @@ const approveFeeSettlement = async (connection, verification, reviewerId, remark
     );
 };
 
+// Finally wires up the long-dormant 'booking' payment_type: a guest's public
+// slot lock (bookings.status='pending') gets confirmed once their receipt is
+// approved, with the fee they were quoted becoming the real amount_charged.
+const approveGuestBooking = async (connection, verification, reviewerId, remarks) => {
+    const [[booking]] = await connection.query('SELECT booking_id, status FROM bookings WHERE booking_id = ? FOR UPDATE', [verification.booking_id]);
+    if (!booking) {
+        const err = new Error('The booking this submission is for no longer exists.');
+        err.statusCode = 404;
+        throw err;
+    }
+    if (booking.status !== 'pending') {
+        const err = new Error(`This booking is already ${booking.status}.`);
+        err.statusCode = 409;
+        throw err;
+    }
+
+    await connection.query(
+        "UPDATE bookings SET status = 'confirmed', lock_expires_at = NULL, amount_charged = ? WHERE booking_id = ?",
+        [verification.amount_declared, booking.booking_id]
+    );
+
+    await connection.query(
+        `INSERT INTO payments (amount, payment_type, booking_id, verification_id, handled_by, status, notes)
+         VALUES (?, 'booking_fee', ?, ?, ?, 'completed', ?)`,
+        [verification.amount_declared, booking.booking_id, verification.verification_id, reviewerId, verification.note]
+    );
+
+    await connection.query(
+        "UPDATE payment_verification SET status = 'approved', reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE verification_id = ?",
+        [reviewerId, remarks || null, verification.verification_id]
+    );
+};
+
+// Rejecting frees the slot — the existing reuse-on-create logic in
+// createGuestLock/createBooking picks up a 'rejected' row and overwrites it
+// for the next guest.
+const rejectGuestBooking = async (connection, verification, reviewerId, remarks) => {
+    await connection.query("UPDATE bookings SET status = 'rejected' WHERE booking_id = ?", [verification.booking_id]);
+
+    await connection.query(
+        "UPDATE payment_verification SET status = 'rejected', reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE verification_id = ?",
+        [reviewerId, remarks || null, verification.verification_id]
+    );
+};
+
 const reviewVerification = (status) => async (req, res) => {
     const { id } = req.params;
     const { remarks } = req.body;
@@ -246,11 +291,17 @@ const reviewVerification = (status) => async (req, res) => {
                 if (['donation', 'tournament_fee'].includes(verification.payment_type)) {
                     return approveMemberPayment(connection, verification, req.user.user_id, remarks);
                 }
+                if (verification.payment_type === 'booking') {
+                    return approveGuestBooking(connection, verification, req.user.user_id, remarks);
+                }
                 return reviewOther(connection, status, verification, req.user.user_id, remarks);
             }
 
             if (verification.payment_type === 'registration') {
                 return rejectRegistration(connection, verification, req.user.user_id, remarks);
+            }
+            if (verification.payment_type === 'booking') {
+                return rejectGuestBooking(connection, verification, req.user.user_id, remarks);
             }
             return reviewOther(connection, status, verification, req.user.user_id, remarks);
         });

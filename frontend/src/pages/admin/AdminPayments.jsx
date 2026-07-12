@@ -77,6 +77,7 @@ const AdminPayments = () => {
             account_number: settings?.account_number || '',
             branch: settings?.branch || '',
             payment_instructions: settings?.payment_instructions || '',
+            guest_booking_fee: settings?.guest_booking_fee || '',
         });
         setEditingSettings(true);
     };
@@ -208,6 +209,11 @@ const AdminPayments = () => {
                                 <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                     value={settingsForm.branch} onChange={(e) => setSettingsForm({ ...settingsForm, branch: e.target.value })} />
                             </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Guest Booking Fee (LKR)</label>
+                                <input type="number" step="0.01" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={settingsForm.guest_booking_fee} onChange={(e) => setSettingsForm({ ...settingsForm, guest_booking_fee: e.target.value })} />
+                            </div>
                         </div>
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400">Instructions shown to members</label>
@@ -241,6 +247,10 @@ const AdminPayments = () => {
                         <div>
                             <p className="text-[9px] font-black uppercase text-slate-400">Branch</p>
                             <p className="text-slate-900 font-bold">{settings?.branch || '—'}</p>
+                        </div>
+                        <div>
+                            <p className="text-[9px] font-black uppercase text-slate-400">Guest Booking Fee</p>
+                            <p className="text-slate-900 font-bold font-mono">LKR {settings?.guest_booking_fee || '—'}</p>
                         </div>
                     </div>
                 )}

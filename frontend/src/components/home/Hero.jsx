@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRight, Trophy, Activity, MousePointer2 } from 'lucide-react';
 import HeroImg from '../../assets/images/tennisPlayer.jpg';
 
@@ -42,10 +43,10 @@ const Hero = () => {
 
         {/* Centered Action Buttons */}
         <div className="flex flex-wrap justify-center gap-6 w-full">
-          <button className="bg-emerald text-white px-10 py-5 rounded-club text-[11px] font-bold tracking-registry uppercase hover:bg-white hover:text-obsidian transition-all duration-300 shadow-2xl shadow-emerald/40 flex items-center group">
-            Book a Court 
+          <Link to="/courts#book" className="bg-emerald text-white px-10 py-5 rounded-club text-[11px] font-bold tracking-registry uppercase hover:bg-white hover:text-obsidian transition-all duration-300 shadow-2xl shadow-emerald/40 flex items-center group no-underline">
+            Book a Court
             <ArrowRight size={16} className="ml-3 group-hover:translate-x-2 transition-transform" />
-          </button>
+          </Link>
           
           <button className="bg-white/5 backdrop-blur-sm border border-white/10 text-white px-10 py-5 rounded-club text-[11px] font-bold tracking-registry uppercase hover:bg-white/10 transition-all flex items-center gap-3 group">
             <Trophy size={16} className="text-amber" />

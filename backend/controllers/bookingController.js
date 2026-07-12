@@ -1,3 +1,4 @@
+const fs = require('fs');
 const pool = require('../config/db');
 const { withTransaction } = pool;
 
@@ -29,6 +30,12 @@ const resolveSelfId = async (conn, role, userId) => {
     return row ? row[idCol] : null;
 };
 
+// Single source of truth for grid occupancy — booked (confirmed) vs locked
+// (pending, not yet expired) — consumed identically by the public guest
+// widget and every authenticated booking page, so a guest's in-progress lock
+// and a member/coach/admin's own bookings can never show conflicting
+// pictures of the same slot. Public (no role check): occupancy state alone
+// reveals nothing personal.
 const getAvailability = async (req, res) => {
     const { date } = req.query;
     if (!date || !DATE_RE.test(date)) {
@@ -37,12 +44,139 @@ const getAvailability = async (req, res) => {
 
     try {
         const [rows] = await pool.query(
-            "SELECT court_id, slot_id FROM bookings WHERE booking_date = ? AND status = 'confirmed'",
+            `SELECT court_id, slot_id,
+                    CASE WHEN status = 'confirmed' THEN 'booked' ELSE 'locked' END AS state
+             FROM bookings
+             WHERE booking_date = ?
+               AND (status = 'confirmed' OR (status = 'pending' AND (lock_expires_at IS NULL OR lock_expires_at > NOW())))`,
             [date]
         );
         res.json({ data: rows });
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch availability.', error: err.message });
+    }
+};
+
+// Public: clicking an open slot holds it for 5 minutes while the guest pays.
+const createGuestLock = async (req, res) => {
+    const { court_id, slot_id, booking_date, guest_full_name, guest_phone, guest_email } = req.body;
+
+    if (!court_id || !slot_id || !booking_date) {
+        return res.status(400).json({ message: 'court_id, slot_id and booking_date are required.' });
+    }
+    if (!DATE_RE.test(booking_date)) {
+        return res.status(400).json({ message: 'booking_date must be YYYY-MM-DD.' });
+    }
+    if (booking_date < todayISO()) {
+        return res.status(400).json({ message: 'Cannot book a date in the past.' });
+    }
+    if (!guest_full_name || !guest_phone) {
+        return res.status(400).json({ message: 'guest_full_name and guest_phone are required.' });
+    }
+
+    try {
+        const data = await withTransaction(async (connection) => {
+            const [[court]] = await connection.query('SELECT status, is_active FROM courts WHERE court_id = ?', [court_id]);
+            if (!court) notFound('Court not found.');
+            if (!court.is_active || court.status !== 'available') conflict('This court is not available for booking.');
+
+            const [[slot]] = await connection.query('SELECT slot_id FROM time_slots WHERE slot_id = ?', [slot_id]);
+            if (!slot) notFound('Time slot not found.');
+
+            const [insertGuest] = await connection.query(
+                'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
+                [guest_full_name, guest_phone, guest_email || null]
+            );
+            const guest_id = insertGuest.insertId;
+
+            // Same locking-read + reuse pattern as createBooking, extended
+            // with one more "still occupied" condition: a pending row only
+            // blocks while its lock hasn't expired.
+            const [[existing]] = await connection.query(
+                'SELECT booking_id, status, lock_expires_at FROM bookings WHERE court_id = ? AND booking_date = ? AND slot_id = ? FOR UPDATE',
+                [court_id, booking_date, slot_id]
+            );
+
+            const stillLocked = existing && existing.status === 'pending' &&
+                (existing.lock_expires_at === null || new Date(existing.lock_expires_at) > new Date());
+
+            let booking_id;
+            if (existing && (existing.status === 'confirmed' || stillLocked)) {
+                conflict('This slot is no longer available.');
+            } else if (existing) {
+                await connection.query(
+                    `UPDATE bookings SET booking_type = 'guest', amount_charged = 0, member_id = NULL, coach_id = NULL, guest_id = ?,
+                            status = 'pending', lock_status = 'unlocked', lock_expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE),
+                            created_by_user_id = NULL, created_at = NOW()
+                     WHERE booking_id = ?`,
+                    [guest_id, existing.booking_id]
+                );
+                booking_id = existing.booking_id;
+            } else {
+                const [insertResult] = await connection.query(
+                    `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, guest_id, status, lock_status, lock_expires_at, created_by_user_id)
+                     VALUES (?, ?, ?, 'guest', 0, ?, 'pending', 'unlocked', DATE_ADD(NOW(), INTERVAL 5 MINUTE), NULL)`,
+                    [court_id, slot_id, booking_date, guest_id]
+                );
+                booking_id = insertResult.insertId;
+            }
+
+            const [[row]] = await connection.query(
+                'SELECT booking_id, lock_expires_at FROM bookings WHERE booking_id = ?',
+                [booking_id]
+            );
+            return row;
+        });
+
+        res.status(201).json({ message: 'Slot held for 5 minutes — complete payment to confirm.', data });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'This slot is no longer available.' });
+        if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
+        res.status(500).json({ message: 'Failed to hold this slot.', error: err.message });
+    }
+};
+
+// Public: guest uploads their payment receipt against the booking they just
+// locked. Clears lock_expires_at — the slot stays held, now awaiting admin
+// review instead of counting down toward payment.
+const submitGuestPayment = async (req, res) => {
+    const booking_id = req.params.id;
+    const { note } = req.body;
+    const receiptFile = req.file;
+
+    const fail = (status, message) => {
+        if (receiptFile) fs.unlink(receiptFile.path, () => {});
+        return res.status(status).json({ message });
+    };
+
+    if (!booking_id) return fail(400, 'booking_id is required.');
+    if (!receiptFile) return fail(400, 'A payment slip (receipt) is required.');
+
+    try {
+        const [[booking]] = await pool.query('SELECT * FROM bookings WHERE booking_id = ?', [booking_id]);
+        if (!booking) return fail(404, 'Booking not found.');
+        if (booking.status !== 'pending') return fail(409, `This booking is already ${booking.status}.`);
+        if (booking.lock_expires_at && new Date(booking.lock_expires_at) <= new Date()) {
+            return fail(409, 'This slot hold has expired. Please select a slot again.');
+        }
+
+        const [[setting]] = await pool.query("SELECT setting_value FROM club_settings WHERE setting_key = 'guest_booking_fee'");
+        const fee = setting ? Number(setting.setting_value) : 0;
+
+        const receipt_file_url = `/uploads/slips/${receiptFile.filename}`;
+
+        const [result] = await pool.query(
+            `INSERT INTO payment_verification (booking_id, payment_type, receipt_file_url, amount_declared, note, status)
+             VALUES (?, 'booking', ?, ?, ?, 'pending')`,
+            [booking_id, receipt_file_url, fee, note || null]
+        );
+
+        await pool.query('UPDATE bookings SET lock_expires_at = NULL WHERE booking_id = ?', [booking_id]);
+
+        res.status(201).json({ message: 'Payment submitted for review.', verification_id: result.insertId });
+    } catch (err) {
+        if (receiptFile) fs.unlink(receiptFile.path, () => {});
+        res.status(500).json({ message: 'Failed to submit payment.', error: err.message });
     }
 };
 
@@ -154,21 +288,27 @@ const createBooking = async (req, res) => {
             // this request just created — genuinely race-safe, not a
             // check-then-act TOCTOU gap.
             const [[existing]] = await connection.query(
-                'SELECT booking_id, status FROM bookings WHERE court_id = ? AND booking_date = ? AND slot_id = ? FOR UPDATE',
+                'SELECT booking_id, status, lock_expires_at FROM bookings WHERE court_id = ? AND booking_date = ? AND slot_id = ? FOR UPDATE',
                 [court_id, booking_date, slot_id]
             );
 
+            // A pending row only still blocks while its hold hasn't expired —
+            // same rule createGuestLock uses, so an abandoned public lock
+            // can't wrongly block a member/coach/admin booking attempt.
+            const stillOccupied = existing && (existing.status === 'confirmed' ||
+                (existing.status === 'pending' && (existing.lock_expires_at === null || new Date(existing.lock_expires_at) > new Date())));
+
             let booking_id;
-            if (existing) {
-                if (['pending', 'confirmed'].includes(existing.status)) {
-                    conflict('This slot is already booked.');
-                }
-                // Existing row is cancelled/rejected — the UNIQUE KEY on
-                // (court_id, booking_date, slot_id) has no idea about status,
-                // so we reuse this exact row rather than inserting a new one.
+            if (stillOccupied) {
+                conflict('This slot is already booked.');
+            } else if (existing) {
+                // Existing row is cancelled/rejected/expired-pending — the
+                // UNIQUE KEY on (court_id, booking_date, slot_id) has no idea
+                // about status, so we reuse this exact row rather than
+                // inserting a new one.
                 await connection.query(
                     `UPDATE bookings SET booking_type = ?, amount_charged = ?, member_id = ?, guest_id = ?, coach_id = ?,
-                            status = 'confirmed', lock_status = 'unlocked', created_by_user_id = ?, created_at = NOW()
+                            status = 'confirmed', lock_status = 'unlocked', lock_expires_at = NULL, created_by_user_id = ?, created_at = NOW()
                      WHERE booking_id = ?`,
                     [booking_type, amount_charged, member_id, guest_id, coach_id, req.user.user_id, existing.booking_id]
                 );
@@ -274,4 +414,7 @@ const updateBookingStatus = async (req, res) => {
     }
 };
 
-module.exports = { getAvailability, getBookings, createBooking, updateBookingStatus };
+module.exports = {
+    getAvailability, getBookings, createBooking, updateBookingStatus,
+    createGuestLock, submitGuestPayment,
+};

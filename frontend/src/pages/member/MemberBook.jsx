@@ -11,7 +11,7 @@ const MemberBook = () => {
     const [selectedDate, setSelectedDate] = useState(todayISO());
     const [courts, setCourts] = useState([]);
     const [slots, setSlots] = useState([]);
-    const [takenKeys, setTakenKeys] = useState(new Set());
+    const [stateMap, setStateMap] = useState({});
     const [pending, setPending] = useState(null);
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -25,16 +25,22 @@ const MemberBook = () => {
         apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
     }, []);
 
+    const buildStateMap = (rows) => {
+        const map = {};
+        rows.forEach((r) => { map[slotKey(r.court_id, r.slot_id)] = r.state; });
+        return map;
+    };
+
     useEffect(() => {
         apiFetch(`/api/bookings/availability?date=${selectedDate}`)
             .then((res) => res.json())
-            .then((data) => setTakenKeys(new Set((data.data || []).map((r) => slotKey(r.court_id, r.slot_id)))));
+            .then((data) => setStateMap(buildStateMap(data.data || [])));
     }, [selectedDate]);
 
     const refreshAvailability = () => {
         apiFetch(`/api/bookings/availability?date=${selectedDate}`)
             .then((res) => res.json())
-            .then((data) => setTakenKeys(new Set((data.data || []).map((r) => slotKey(r.court_id, r.slot_id)))));
+            .then((data) => setStateMap(buildStateMap(data.data || [])));
     };
 
     const handleSelectSlot = (court, slot) => {
@@ -103,7 +109,7 @@ const MemberBook = () => {
                 <CourtSlotGrid
                     courts={courts}
                     slots={slots}
-                    takenKeys={takenKeys}
+                    stateMap={stateMap}
                     onSelectSlot={handleSelectSlot}
                     selectedKey={pending ? slotKey(pending.court.court_id, pending.slot.slot_id) : null}
                 />
