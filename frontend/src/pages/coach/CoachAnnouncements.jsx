@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Trophy, Hammer, Bell, Megaphone } from 'lucide-react';
+import SearchInput from '../../components/common/SearchInput';
 import { apiFetch } from '../../utils/api';
 
 const CATEGORY_CONFIG = {
@@ -17,6 +18,7 @@ const formatDate = (dateStr) =>
 const CoachAnnouncements = () => {
     const [announcements, setAnnouncements] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
 
     useEffect(() => {
         apiFetch('/api/announcements')
@@ -26,13 +28,21 @@ const CoachAnnouncements = () => {
             .finally(() => setLoading(false));
     }, []);
 
+    const filteredAnnouncements = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return announcements.filter((a) => !q || [a.title, a.content].some((v) => v?.toLowerCase().includes(q)));
+    }, [announcements, search]);
+
     return (
         <div className="relative space-y-10 animate-in fade-in duration-700">
-            <header className="relative z-10">
-                <h1 className="text-slate-900 text-4xl font-serif italic">Club Notices.</h1>
-                <p className="text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] mt-2">
-                    Announcements &amp; Updates
-                </p>
+            <header className="relative z-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-slate-900 text-4xl font-serif italic">Club Notices.</h1>
+                    <p className="text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] mt-2">
+                        Announcements &amp; Updates
+                    </p>
+                </div>
+                <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search notices..." className="w-full sm:w-64" />
             </header>
 
             <div className="relative z-10 bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
@@ -48,8 +58,14 @@ const CoachAnnouncements = () => {
                     </p>
                 )}
 
+                {!loading && announcements.length > 0 && filteredAnnouncements.length === 0 && (
+                    <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black py-10 text-center">
+                        No notices match your search.
+                    </p>
+                )}
+
                 <div className="space-y-6">
-                    {announcements.map((item) => {
+                    {filteredAnnouncements.map((item) => {
                         const config = CATEGORY_CONFIG[item.category] || defaultConfig;
                         return (
                             <div

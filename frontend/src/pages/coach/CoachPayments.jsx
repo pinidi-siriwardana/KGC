@@ -1,7 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Wallet, Trophy, UserCheck, Receipt, Ban, Heart, FileUp, CheckCircle2, ExternalLink, UserX } from 'lucide-react';
 import { apiFetch, API_URL } from '../../utils/api';
 import Modal from '../../components/common/Modal';
+import SearchInput from '../../components/common/SearchInput';
+import FilterSelect from '../../components/common/FilterSelect';
+
+const STATUS_OPTIONS = [
+    { value: '', label: 'All Statuses' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'recorded', label: 'Recorded' },
+    { value: 'refunded', label: 'Refunded' },
+    { value: 'waived', label: 'Waived' },
+];
 
 const PAYMENT_TYPE_ICON = {
     membership: Wallet,
@@ -45,6 +55,17 @@ const CoachPayments = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [payingFee, setPayingFee] = useState(null);
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+
+    const filteredPayments = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return payments.filter((p) => {
+            const matchesSearch = !q || [p.payment_type, p.notes].some((v) => v?.toLowerCase().includes(q));
+            const matchesStatus = !statusFilter || p.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+    }, [payments, search, statusFilter]);
 
     const fetchHistory = () => {
         apiFetch('/api/coach/payments')
@@ -144,14 +165,23 @@ const CoachPayments = () => {
             )}
 
             <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
-                <h3 className="text-slate-800 text-lg font-serif italic mb-6">Payment History</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <h3 className="text-slate-800 text-lg font-serif italic">Payment History</h3>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
+                        <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search payments..." className="w-full sm:w-56" />
+                    </div>
+                </div>
                 {loading && (
                     <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black py-6 text-center">Loading...</p>
                 )}
                 {!loading && payments.length === 0 && (
                     <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black py-6 text-center">No payments recorded yet.</p>
                 )}
-                {payments.length > 0 && (
+                {!loading && payments.length > 0 && filteredPayments.length === 0 && (
+                    <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black py-6 text-center">No payments match these filters.</p>
+                )}
+                {filteredPayments.length > 0 && (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
@@ -164,7 +194,7 @@ const CoachPayments = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {payments.map((p) => {
+                                {filteredPayments.map((p) => {
                                     const Icon = PAYMENT_TYPE_ICON[p.payment_type] || Receipt;
                                     return (
                                         <tr key={p.payment_id} className="hover:bg-slate-50 transition-colors">

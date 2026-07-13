@@ -1,9 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Trophy, Settings, Hammer, CheckCircle, Activity, ShieldAlert } from 'lucide-react';
+import SearchInput from '../../components/common/SearchInput';
+import FilterSelect from '../../components/common/FilterSelect';
 import { apiFetch } from '../../utils/api';
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'All Statuses' },
+  { value: 'available', label: 'Available' },
+  { value: 'maintenance', label: 'Maintenance' },
+];
 
 const AdminCourts = () => {
   const [courts, setCourts] = useState([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const filteredCourts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return courts.filter((c) => {
+      const matchesSearch = !q || [c.court_name, c.court_type].some((v) => v?.toLowerCase().includes(q));
+      const matchesStatus = !statusFilter || c.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [courts, search, statusFilter]);
 
   // Fetch initial court data from our new API
   useEffect(() => {
@@ -33,14 +52,18 @@ const AdminCourts = () => {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
       {/* Header Section */}
-      <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+      <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-50/50">
         <div>
           <h2 className="text-slate-900 text-xs font-black uppercase tracking-[0.3em]">Court Management</h2>
           <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">KGC Facility Overview</p>
         </div>
-        <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded-full uppercase border border-blue-100 flex items-center gap-2">
-          <Activity size={12} /> {courts.length} Registered Tracks
-        </span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
+          <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search courts..." className="w-full sm:w-56" />
+          <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded-full uppercase border border-blue-100 flex items-center gap-2 whitespace-nowrap">
+            <Activity size={12} /> {courts.length} Registered Tracks
+          </span>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -54,7 +77,7 @@ const AdminCourts = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {courts.map((court) => (
+            {filteredCourts.map((court) => (
               <tr key={court.court_id} className="hover:bg-slate-50 group transition-colors">
                 {/* Court Name column */}
                 <td className="p-4">
@@ -120,9 +143,9 @@ const AdminCourts = () => {
           </tbody>
         </table>
 
-        {courts.length === 0 && (
+        {filteredCourts.length === 0 && (
           <div className="p-20 text-center italic text-slate-300 text-xs tracking-[0.2em] uppercase font-medium">
-            No court data found in system registry.
+            {courts.length === 0 ? 'No court data found in system registry.' : 'No courts match these filters.'}
           </div>
         )}
       </div>

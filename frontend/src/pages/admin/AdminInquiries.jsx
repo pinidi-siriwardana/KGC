@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MessageSquare, Mail, Phone, Clock, Send, Trash2, ChevronRight, Inbox } from 'lucide-react';
+import SearchInput from '../../components/common/SearchInput';
+import FilterSelect from '../../components/common/FilterSelect';
 import { apiFetch } from '../../utils/api';
 
 const STATUS_STYLES = {
@@ -8,12 +10,30 @@ const STATUS_STYLES = {
     replied: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
+const STATUS_OPTIONS = [
+    { value: '', label: 'All' },
+    { value: 'unread', label: 'Unread' },
+    { value: 'read', label: 'Read' },
+    { value: 'replied', label: 'Replied' },
+];
+
 const AdminInquiries = () => {
     const [inquiries, setInquiries] = useState([]);
     const [selected, setSelected] = useState(null);
     const [replyText, setReplyText] = useState('');
     const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+
+    const filteredInquiries = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return inquiries.filter((i) => {
+            const matchesSearch = !q || [i.full_name, i.email, i.message].some((v) => v?.toLowerCase().includes(q));
+            const matchesStatus = !statusFilter || i.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+    }, [inquiries, search, statusFilter]);
 
     useEffect(() => { fetchInquiries(); }, []);
 
@@ -112,6 +132,10 @@ const AdminInquiries = () => {
                             </span>
                         )}
                     </div>
+                    <div className="flex gap-2 mt-4">
+                        <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search inquiries..." className="flex-1" />
+                        <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
@@ -124,7 +148,13 @@ const AdminInquiries = () => {
                             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">No inquiries yet</p>
                         </div>
                     )}
-                    {inquiries.map((inquiry) => (
+                    {!loading && inquiries.length > 0 && filteredInquiries.length === 0 && (
+                        <div className="p-12 text-center">
+                            <Inbox size={32} className="text-slate-200 mx-auto mb-3" />
+                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">No inquiries match these filters</p>
+                        </div>
+                    )}
+                    {filteredInquiries.map((inquiry) => (
                         <button
                             key={inquiry.inquiry_id}
                             onClick={() => openInquiry(inquiry)}

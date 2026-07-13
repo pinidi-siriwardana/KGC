@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Clock, History, Lock, X } from 'lucide-react';
+import SearchInput from '../../components/common/SearchInput';
 import { apiFetch } from '../../utils/api';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -19,6 +20,7 @@ const CoachSessions = () => {
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState('upcoming');
     const [cancellationFee, setCancellationFee] = useState(null);
+    const [search, setSearch] = useState('');
 
     const fetchBookings = () => {
         apiFetch('/api/bookings')
@@ -60,28 +62,36 @@ const CoachSessions = () => {
         .filter((b) => b.booking_date < todayISO() || ['cancelled', 'rejected'].includes(b.status))
         .sort((a, b) => (b.booking_date + b.start_time).localeCompare(a.booking_date + a.start_time));
 
-    const rows = tab === 'upcoming' ? upcoming : history;
+    const rows = useMemo(() => {
+        const list = tab === 'upcoming' ? upcoming : history;
+        const q = search.trim().toLowerCase();
+        return q ? list.filter((b) => b.court_name?.toLowerCase().includes(q)) : list;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab, search, bookings]);
 
     return (
         <div className="relative space-y-8 animate-in fade-in duration-700">
-            <header className="relative z-10 flex items-center justify-between">
+            <header className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-slate-900 text-4xl font-serif italic">Session <span className="text-amber-600">Logs.</span></h1>
                     <p className="text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Your Reserved Courts</p>
                 </div>
-                <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
-                    <button
-                        onClick={() => setTab('upcoming')}
-                        className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${tab === 'upcoming' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-                    >
-                        Upcoming
-                    </button>
-                    <button
-                        onClick={() => setTab('history')}
-                        className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${tab === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-                    >
-                        History
-                    </button>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by court..." className="w-full sm:w-56" />
+                    <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
+                        <button
+                            onClick={() => setTab('upcoming')}
+                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${tab === 'upcoming' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                        >
+                            Upcoming
+                        </button>
+                        <button
+                            onClick={() => setTab('history')}
+                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${tab === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                        >
+                            History
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -91,7 +101,9 @@ const CoachSessions = () => {
                 )}
                 {!loading && rows.length === 0 && (
                     <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black py-10 text-center">
-                        {tab === 'upcoming' ? 'No upcoming sessions.' : 'No past sessions yet.'}
+                        {search
+                            ? 'No sessions match your search.'
+                            : tab === 'upcoming' ? 'No upcoming sessions.' : 'No past sessions yet.'}
                     </p>
                 )}
                 <div className="space-y-4">

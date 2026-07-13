@@ -1,13 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { UserCheck, Shield, UserCog, Trash2, Plus, Mail, MoreVertical } from 'lucide-react';
 import Modal from '../../components/common/Modal';
+import SearchInput from '../../components/common/SearchInput';
+import FilterSelect from '../../components/common/FilterSelect';
 import { apiFetch } from '../../utils/api';
+
+const ROLE_OPTIONS = [
+    { value: '', label: 'All Roles' },
+    { value: 'member', label: 'Member' },
+    { value: 'coach', label: 'Coach' },
+    { value: 'admin', label: 'Administrator' },
+];
+
+const STATUS_OPTIONS = [
+    { value: '', label: 'All Statuses' },
+    { value: 'active', label: 'Active' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'disabled', label: 'Disabled' },
+];
 
 const AdminUsers = () => {
     const [users, setUsers] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
     const [formData, setFormData] = useState({ username: '', password: '', role: 'member', status: 'active' });
+    const [search, setSearch] = useState('');
+    const [roleFilter, setRoleFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+
+    const filteredUsers = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return users.filter((u) => {
+            const matchesSearch = !q || u.username?.toLowerCase().includes(q);
+            const matchesRole = !roleFilter || u.role === roleFilter;
+            const matchesStatus = !statusFilter || u.status === statusFilter;
+            return matchesSearch && matchesRole && matchesStatus;
+        });
+    }, [users, search, roleFilter, statusFilter]);
 
     useEffect(() => { fetchUsers(); }, []);
 
@@ -79,14 +108,19 @@ const AdminUsers = () => {
     return (
         <div className="p-6">
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-50/50">
                     <div>
                         <h2 className="text-slate-900 text-xs font-black uppercase tracking-[0.3em]">Access Management</h2>
                         <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Control system roles and login permissions</p>
                     </div>
-                    <button onClick={() => handleOpenModal()} className="flex items-center gap-2 text-[10px] bg-slate-900 text-white font-black px-4 py-2 rounded-lg uppercase tracking-widest hover:bg-slate-800 transition-all">
-                        <Plus size={14} /> Create New User
-                    </button>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <FilterSelect value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} options={ROLE_OPTIONS} />
+                        <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
+                        <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search username..." className="w-full sm:w-56" />
+                        <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-2 text-[10px] bg-slate-900 text-white font-black px-4 py-2 rounded-lg uppercase tracking-widest hover:bg-slate-800 transition-all">
+                            <Plus size={14} /> Create New User
+                        </button>
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -100,7 +134,7 @@ const AdminUsers = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {users.map((u) => (
+                            {filteredUsers.map((u) => (
                                 <tr key={u.user_id} className="hover:bg-slate-50 group transition-colors">
                                     <td className="p-4">
                                         <div className="flex items-center gap-3">
@@ -138,6 +172,11 @@ const AdminUsers = () => {
                             ))}
                         </tbody>
                     </table>
+                    {filteredUsers.length === 0 && (
+                        <div className="p-16 text-center">
+                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">No users match these filters</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* User Management Modal */}

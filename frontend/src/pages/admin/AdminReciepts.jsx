@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Check, X, Eye, AlertCircle, Pencil, RotateCcw, ExternalLink } from 'lucide-react';
 import { apiFetch, API_URL } from '../../utils/api';
 import Modal from '../../components/common/Modal';
+import SearchInput from '../../components/common/SearchInput';
+import FilterSelect from '../../components/common/FilterSelect';
+
+const STATUS_OPTIONS = [
+    { value: '', label: 'All Statuses' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'rejected', label: 'Rejected' },
+];
 
 const ReceiptReview = () => {
     const [slips, setSlips] = useState([]);
@@ -9,6 +17,17 @@ const ReceiptReview = () => {
     const [loading, setLoading] = useState(true);
     const [editingEntry, setEditingEntry] = useState(null);
     const [editForm, setEditForm] = useState({ remarks: '', amount_declared: '' });
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+
+    const filteredHistory = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return history.filter((h) => {
+            const matchesSearch = !q || [h.full_name, h.email].some((v) => v?.toLowerCase().includes(q));
+            const matchesStatus = !statusFilter || h.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+    }, [history, search, statusFilter]);
 
     const fetchSlips = async () => {
         const res = await apiFetch('/api/payments/pending');
@@ -162,8 +181,16 @@ const ReceiptReview = () => {
 
             {/* --- DECISION HISTORY --- */}
             <div className="mt-14">
-                <h2 className="text-white text-lg font-black uppercase tracking-tighter mb-1">Decision History</h2>
-                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-6">Edit remarks/amount, or undo a decision</p>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                    <div>
+                        <h2 className="text-white text-lg font-black uppercase tracking-tighter mb-1">Decision History</h2>
+                        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Edit remarks/amount, or undo a decision</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} dark />
+                        <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name..." dark className="w-full sm:w-56" />
+                    </div>
+                </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
                     <table className="w-full text-left">
@@ -179,7 +206,7 @@ const ReceiptReview = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800">
-                            {history.map((entry) => (
+                            {filteredHistory.map((entry) => (
                                 <tr key={entry.verification_id} className="hover:bg-slate-800/40 transition-colors group">
                                     <td className="p-4">
                                         <p className="text-white text-sm font-bold">{entry.full_name || 'Guest User'}</p>
@@ -232,9 +259,11 @@ const ReceiptReview = () => {
                         </tbody>
                     </table>
 
-                    {history.length === 0 && (
+                    {filteredHistory.length === 0 && (
                         <div className="p-16 text-center">
-                            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">No reviewed receipts yet</p>
+                            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">
+                                {history.length === 0 ? 'No reviewed receipts yet' : 'No receipts match these filters'}
+                            </p>
                         </div>
                     )}
                 </div>

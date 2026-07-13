@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit3, Trash2, Megaphone, Trophy, Hammer, Bell, Clock, Radio } from 'lucide-react';
 import Modal from '../../components/common/Modal';
+import SearchInput from '../../components/common/SearchInput';
 import { apiFetch } from '../../utils/api';
 
 const CATEGORIES = ['GENERAL', 'CHAMPIONSHIP', 'MAINTENANCE', 'CLUB EVENT'];
@@ -40,6 +41,7 @@ const emptyForm = { title: '', category: 'GENERAL', content: '', publish_at: '' 
 const AdminAnnouncements = () => {
     const [announcements, setAnnouncements] = useState([]);
     const [filter, setFilter] = useState('all'); // all | live | scheduled
+    const [search, setSearch] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [formData, setFormData] = useState(emptyForm);
@@ -104,8 +106,10 @@ const AdminAnnouncements = () => {
     };
 
     const filtered = announcements.filter(a => {
-        if (filter === 'live') return !isScheduled(a.publish_at);
-        if (filter === 'scheduled') return isScheduled(a.publish_at);
+        if (filter === 'live' && isScheduled(a.publish_at)) return false;
+        if (filter === 'scheduled' && !isScheduled(a.publish_at)) return false;
+        const q = search.trim().toLowerCase();
+        if (q && ![a.title, a.content].some((v) => v?.toLowerCase().includes(q))) return false;
         return true;
     });
 
@@ -128,24 +132,27 @@ const AdminAnnouncements = () => {
             </header>
 
             {/* Filter tabs */}
-            <div className="flex items-center gap-2 mb-6">
-                {[
-                    { key: 'all', label: `All (${announcements.length})` },
-                    { key: 'live', label: `Live (${liveCount})`, icon: <Radio size={11} /> },
-                    { key: 'scheduled', label: `Scheduled (${scheduledCount})`, icon: <Clock size={11} /> },
-                ].map(tab => (
-                    <button
-                        key={tab.key}
-                        onClick={() => setFilter(tab.key)}
-                        className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                            filter === tab.key
-                                ? 'bg-slate-900 text-white shadow'
-                                : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
-                        }`}
-                    >
-                        {tab.icon}{tab.label}
-                    </button>
-                ))}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+                <div className="flex items-center gap-2">
+                    {[
+                        { key: 'all', label: `All (${announcements.length})` },
+                        { key: 'live', label: `Live (${liveCount})`, icon: <Radio size={11} /> },
+                        { key: 'scheduled', label: `Scheduled (${scheduledCount})`, icon: <Clock size={11} /> },
+                    ].map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setFilter(tab.key)}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                filter === tab.key
+                                    ? 'bg-slate-900 text-white shadow'
+                                    : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}
+                        >
+                            {tab.icon}{tab.label}
+                        </button>
+                    ))}
+                </div>
+                <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search announcements..." className="w-full md:w-64" />
             </div>
 
             <div className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-sm">
