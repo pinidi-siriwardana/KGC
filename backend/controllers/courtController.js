@@ -13,10 +13,6 @@ const updateCourtStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!['available', 'maintenance'].includes(status)) {
-        return res.status(400).json({ message: "status must be 'available' or 'maintenance'." });
-    }
-
     try {
         const [result] = await pool.query('UPDATE courts SET status = ? WHERE court_id = ?', [status, id]);
 

@@ -1,8 +1,6 @@
 const fs = require('fs');
 const pool = require('../config/db');
 
-const ALLOWED_TYPES = ['membership_renewal', 'donation', 'tournament_fee'];
-
 const resolveMemberId = async (userId) => {
     const [[row]] = await pool.query('SELECT member_id FROM members WHERE user_id = ?', [userId]);
     return row ? row.member_id : null;
@@ -46,9 +44,6 @@ const submitPayment = async (req, res) => {
         return res.status(status).json({ message });
     };
 
-    if (!ALLOWED_TYPES.includes(payment_type)) {
-        return fail(400, "payment_type must be 'membership_renewal', 'donation' or 'tournament_fee'.");
-    }
     if (!receiptFile) {
         return fail(400, 'A payment slip (receipt) is required.');
     }
@@ -61,7 +56,6 @@ const submitPayment = async (req, res) => {
         let planId = null;
 
         if (payment_type === 'membership_renewal') {
-            if (!membership_type_id) return fail(400, 'membership_type_id is required for a membership renewal.');
             const [[plan]] = await pool.query(
                 'SELECT membership_type_id, price FROM membership_types WHERE membership_type_id = ?',
                 [membership_type_id]
@@ -71,8 +65,6 @@ const submitPayment = async (req, res) => {
             // model authController.register already uses for registration.
             finalAmount = plan.price;
             planId = plan.membership_type_id;
-        } else if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
-            return fail(400, 'amount_declared must be a positive number.');
         }
 
         const receipt_file_url = `/uploads/slips/${receiptFile.filename}`;

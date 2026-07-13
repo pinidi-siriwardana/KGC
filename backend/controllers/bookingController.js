@@ -8,7 +8,6 @@ const notFound = (m) => { const e = new Error(m); e.statusCode = 404; throw e; }
 const conflict = (m) => { const e = new Error(m); e.statusCode = 409; throw e; };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const BOOKING_SELECT = `
     SELECT b.*, c.court_name, c.court_type, ts.slot_name, ts.start_time, ts.end_time,
@@ -38,9 +37,6 @@ const resolveSelfId = async (conn, role, userId) => {
 // reveals nothing personal.
 const getAvailability = async (req, res) => {
     const { date } = req.query;
-    if (!date || !DATE_RE.test(date)) {
-        return res.status(400).json({ message: 'date (YYYY-MM-DD) is required.' });
-    }
 
     try {
         const [rows] = await pool.query(
@@ -60,19 +56,6 @@ const getAvailability = async (req, res) => {
 // Public: clicking an open slot holds it for 5 minutes while the guest pays.
 const createGuestLock = async (req, res) => {
     const { court_id, slot_id, booking_date, guest_full_name, guest_phone, guest_email } = req.body;
-
-    if (!court_id || !slot_id || !booking_date) {
-        return res.status(400).json({ message: 'court_id, slot_id and booking_date are required.' });
-    }
-    if (!DATE_RE.test(booking_date)) {
-        return res.status(400).json({ message: 'booking_date must be YYYY-MM-DD.' });
-    }
-    if (booking_date < todayISO()) {
-        return res.status(400).json({ message: 'Cannot book a date in the past.' });
-    }
-    if (!guest_full_name || !guest_phone) {
-        return res.status(400).json({ message: 'guest_full_name and guest_phone are required.' });
-    }
 
     try {
         const data = await withTransaction(async (connection) => {
@@ -212,12 +195,6 @@ const createBooking = async (req, res) => {
     const { court_id, slot_id, booking_date } = req.body;
     const role = req.user.role;
 
-    if (!court_id || !slot_id || !booking_date) {
-        return res.status(400).json({ message: 'court_id, slot_id and booking_date are required.' });
-    }
-    if (!DATE_RE.test(booking_date)) {
-        return res.status(400).json({ message: 'booking_date must be YYYY-MM-DD.' });
-    }
     if (role !== 'admin' && booking_date < todayISO()) {
         return res.status(400).json({ message: 'Cannot book a date in the past.' });
     }
@@ -345,10 +322,6 @@ const createBooking = async (req, res) => {
 const updateBookingStatus = async (req, res) => {
     const { id } = req.params;
     const { action } = req.body;
-
-    if (!['cancel', 'reject', 'lock', 'unlock'].includes(action)) {
-        return res.status(400).json({ message: "action must be 'cancel', 'reject', 'lock' or 'unlock'." });
-    }
 
     try {
         const cancellationFee = await withTransaction(async (connection) => {

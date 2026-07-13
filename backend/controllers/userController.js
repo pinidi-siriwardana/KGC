@@ -15,10 +15,6 @@ const getUsers = async (req, res) => {
 const createUser = async (req, res) => {
     const { username, password, role, status } = req.body;
 
-    if (!username || !password || !role) {
-        return res.status(400).json({ message: 'username, password and role are required.' });
-    }
-
     try {
         const password_hash = await hashPassword(password);
         const [result] = await pool.query(

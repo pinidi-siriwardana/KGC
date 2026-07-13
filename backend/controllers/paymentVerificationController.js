@@ -331,10 +331,6 @@ const editVerification = async (req, res) => {
     if (remarks !== undefined) { fields.push('remarks = ?'); values.push(remarks); }
     if (amount_declared !== undefined) { fields.push('amount_declared = ?'); values.push(amount_declared); }
 
-    if (fields.length === 0) {
-        return res.status(400).json({ message: 'Nothing to update.' });
-    }
-
     try {
         await withTransaction(async (connection) => {
             const [result] = await connection.query(

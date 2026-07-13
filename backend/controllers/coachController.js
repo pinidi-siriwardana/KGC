@@ -18,10 +18,6 @@ const getCoaches = async (req, res) => {
 const createCoach = async (req, res) => {
     const { username, password, full_name, email, phone, specialization, experience_years, status } = req.body;
 
-    if (!username || !password || !full_name || !email || !phone) {
-        return res.status(400).json({ message: 'username, password, full_name, email and phone are required.' });
-    }
-
     try {
         const { coach_id } = await withTransaction(async (connection) => {
             const password_hash = await hashPassword(password);

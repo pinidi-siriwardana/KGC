@@ -14,17 +14,6 @@ const getSettings = async (req, res) => {
 const updateSettings = async (req, res) => {
     const entries = Object.entries(req.body || {});
 
-    if (entries.length === 0) {
-        return res.status(400).json({ message: 'Nothing to update.' });
-    }
-
-    if (req.body.cancellation_fee !== undefined) {
-        const numericFee = Number(req.body.cancellation_fee);
-        if (!Number.isFinite(numericFee) || numericFee < 0) {
-            return res.status(400).json({ message: 'cancellation_fee must be a non-negative number.' });
-        }
-    }
-
     try {
         await Promise.all(entries.map(([key, value]) =>
             pool.query(

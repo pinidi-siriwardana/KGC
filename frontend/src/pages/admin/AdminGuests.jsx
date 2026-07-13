@@ -79,7 +79,7 @@ const fetchGuests = async (searchQuery = "") => {
             fetchGuests(searchTerm); // Refresh with current search context
         } else {
             const err = await res.json();
-            alert(err.error || "Action failed");
+            alert(err.message || "Action failed");
         }
     };
 
@@ -95,7 +95,7 @@ const fetchGuests = async (searchQuery = "") => {
                     fetchGuests(searchTerm); // Refresh list
                 } else {
                     const err = await res.json();
-                    alert(err.error || "Delete failed");
+                    alert(err.message || "Delete failed");
                 }
             } catch (err) {
                 console.error("Delete request failed", err);

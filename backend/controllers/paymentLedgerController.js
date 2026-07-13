@@ -55,21 +55,10 @@ const updatePayment = async (req, res) => {
     const fields = [];
     const values = [];
 
-    if (amount !== undefined) {
-        const numericAmount = Number(amount);
-        if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-            return res.status(400).json({ message: 'amount must be a positive number.' });
-        }
-        fields.push('amount = ?');
-        values.push(numericAmount);
-    }
+    if (amount !== undefined) { fields.push('amount = ?'); values.push(amount); }
     if (payment_date !== undefined) { fields.push('payment_date = ?'); values.push(payment_date); }
     if (notes !== undefined) { fields.push('notes = ?'); values.push(notes || null); }
     if (status !== undefined) { fields.push('status = ?'); values.push(status); }
-
-    if (fields.length === 0) {
-        return res.status(400).json({ message: 'Nothing to update.' });
-    }
 
     try {
         const [result] = await pool.query(

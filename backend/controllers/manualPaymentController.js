@@ -11,10 +11,6 @@ const badRequest = (message) => {
 };
 
 const createNewMemberPayment = async (connection, { username, password, full_name, email, phone, membership_type_id, start_date }, amount, handledBy) => {
-    if (!username || !password || !full_name || !email || !phone || !membership_type_id) {
-        badRequest('username, password, full_name, email, phone and membership_type_id are required.');
-    }
-
     const [[membershipType]] = await connection.query(
         'SELECT duration_months, price FROM membership_types WHERE membership_type_id = ?',
         [membership_type_id]
@@ -34,10 +30,6 @@ const createNewMemberPayment = async (connection, { username, password, full_nam
 };
 
 const createNewCoachPayment = async (connection, { username, password, full_name, email, phone, specialization, experience_years }) => {
-    if (!username || !password || !full_name || !email || !phone) {
-        badRequest('username, password, full_name, email and phone are required.');
-    }
-
     const password_hash = await hashPassword(password);
     const { coach_id } = await createCoachAccount(connection, { username, password_hash, full_name, email, phone, specialization, experience_years });
 
@@ -57,9 +49,6 @@ const createManualPayment = async (req, res) => {
     const { purpose, amount, payment_date, notes, ...rest } = req.body;
 
     const numericAmount = Number(amount);
-    if (!purpose || !Number.isFinite(numericAmount) || numericAmount <= 0) {
-        return res.status(400).json({ message: 'purpose and a positive amount are required.' });
-    }
 
     try {
         const result = await withTransaction(async (connection) => {
@@ -68,10 +57,8 @@ const createManualPayment = async (req, res) => {
                 outcome = await createNewMemberPayment(connection, rest, numericAmount, req.user.user_id);
             } else if (purpose === 'new_coach') {
                 outcome = await createNewCoachPayment(connection, rest);
-            } else if (purpose === 'misc') {
-                outcome = await createMiscPayment(connection, rest);
             } else {
-                badRequest("purpose must be one of 'new_member', 'new_coach', 'misc'.");
+                outcome = await createMiscPayment(connection, rest);
             }
 
             const [paymentResult] = await connection.query(

@@ -1,8 +1,6 @@
 const fs = require('fs');
 const pool = require('../config/db');
 
-const ALLOWED_TYPES = ['donation', 'tournament_fee'];
-
 const resolveCoachId = async (userId) => {
     const [[row]] = await pool.query('SELECT coach_id FROM coaches WHERE user_id = ?', [userId]);
     return row ? row.coach_id : null;
@@ -42,17 +40,11 @@ const submitPayment = async (req, res) => {
         return res.status(status).json({ message });
     };
 
-    if (!ALLOWED_TYPES.includes(payment_type)) {
-        return fail(400, "payment_type must be 'donation' or 'tournament_fee'.");
-    }
     if (!receiptFile) {
         return fail(400, 'A payment slip (receipt) is required.');
     }
 
     const finalAmount = Number(amount_declared);
-    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
-        return fail(400, 'amount_declared must be a positive number.');
-    }
 
     try {
         const coach_id = await resolveCoachId(req.user.user_id);

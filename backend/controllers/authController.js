@@ -13,12 +13,6 @@ const register = async (req, res) => {
         return res.status(status).json({ message });
     };
 
-    if (!full_name || !email || !phone || !username || !password || !membership_type_id) {
-        return fail(400, 'full_name, email, phone, username, password and membership_type_id are required.');
-    }
-    if (password.length < 6) {
-        return fail(400, 'Password must be at least 6 characters.');
-    }
     if (!receiptFile) {
         return fail(400, 'A payment slip (receipt) is required.');
     }
@@ -67,10 +61,6 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ message: 'username and password are required.' });
-    }
 
     try {
         const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);

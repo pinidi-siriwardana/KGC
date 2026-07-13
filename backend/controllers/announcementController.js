@@ -49,9 +49,6 @@ const getAllAnnouncements = async (req, res) => {
 
 const createAnnouncement = async (req, res) => {
     const { title, category, content, publish_at } = req.body;
-    if (!title || !content) {
-        return res.status(400).json({ message: 'title and content are required.' });
-    }
     try {
         await ensureTable();
         const [result] = await pool.query(
@@ -67,9 +64,6 @@ const createAnnouncement = async (req, res) => {
 const updateAnnouncement = async (req, res) => {
     const { id } = req.params;
     const { title, category, content, publish_at } = req.body;
-    if (!title || !content) {
-        return res.status(400).json({ message: 'title and content are required.' });
-    }
     try {
         const [result] = await pool.query(
             `UPDATE announcements

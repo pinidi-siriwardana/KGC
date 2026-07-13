@@ -13,16 +13,12 @@ const getGuests = async (req, res) => {
 
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch guests.', message: err.message });
+        res.status(500).json({ message: 'Failed to fetch guests.', error: err.message });
     }
 };
 
 const createGuest = async (req, res) => {
     const { full_name, phone, email } = req.body;
-
-    if (!full_name || !phone) {
-        return res.status(400).json({ error: 'full_name and phone are required.' });
-    }
 
     try {
         const [result] = await pool.query(
@@ -31,7 +27,7 @@ const createGuest = async (req, res) => {
         );
         res.status(201).json({ message: 'Guest created.', guest_id: result.insertId });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to create guest.', message: err.message });
+        res.status(500).json({ message: 'Failed to create guest.', error: err.message });
     }
 };
 
@@ -46,12 +42,12 @@ const updateGuest = async (req, res) => {
         );
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Guest not found.' });
+            return res.status(404).json({ message: 'Guest not found.' });
         }
 
         res.json({ message: 'Guest updated.' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to update guest.', message: err.message });
+        res.status(500).json({ message: 'Failed to update guest.', error: err.message });
     }
 };
 
@@ -62,12 +58,12 @@ const deleteGuest = async (req, res) => {
         const [result] = await pool.query('DELETE FROM guests WHERE guest_id = ?', [id]);
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Guest not found.' });
+            return res.status(404).json({ message: 'Guest not found.' });
         }
 
         res.json({ message: 'Guest deleted.' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to delete guest.', message: err.message });
+        res.status(500).json({ message: 'Failed to delete guest.', error: err.message });
     }
 };
 

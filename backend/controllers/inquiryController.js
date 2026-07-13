@@ -23,10 +23,6 @@ const ensureTable = async () => {
 const submitInquiry = async (req, res) => {
     const { full_name, email, phone, message } = req.body;
 
-    if (!full_name || !email || !message) {
-        return res.status(400).json({ message: 'full_name, email and message are required.' });
-    }
-
     try {
         await ensureTable();
         const [result] = await pool.query(
@@ -75,10 +71,6 @@ const getInquiry = async (req, res) => {
 const replyToInquiry = async (req, res) => {
     const { id } = req.params;
     const { reply_message } = req.body;
-
-    if (!reply_message || !reply_message.trim()) {
-        return res.status(400).json({ message: 'reply_message is required.' });
-    }
 
     try {
         await ensureTable();

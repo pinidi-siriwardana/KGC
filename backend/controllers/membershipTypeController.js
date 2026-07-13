@@ -14,10 +14,6 @@ const getMembershipTypes = async (req, res) => {
 const createMembershipType = async (req, res) => {
     const { name, duration_months, price } = req.body;
 
-    if (!name || !duration_months || price === undefined) {
-        return res.status(400).json({ message: 'name, duration_months and price are required.' });
-    }
-
     try {
         const [result] = await pool.query(
             'INSERT INTO membership_types (name, duration_months, price) VALUES (?, ?, ?)',

@@ -5,8 +5,6 @@ const badRequest = (m) => { const e = new Error(m); e.statusCode = 400; throw e;
 const notFound = (m) => { const e = new Error(m); e.statusCode = 404; throw e; };
 const conflict = (m) => { const e = new Error(m); e.statusCode = 409; throw e; };
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 // Bookings/attendance link to members/coaches by their own id, not the
 // users.user_id on the JWT — same helper as bookingController.resolveSelfId.
 const resolveSelfId = async (conn, role, userId) => {
@@ -21,9 +19,6 @@ const resolveSelfId = async (conn, role, userId) => {
 // exists — drives the admin Daily Attendance table.
 const getAttendanceForDate = async (req, res) => {
     const { date } = req.query;
-    if (!date || !DATE_RE.test(date)) {
-        return res.status(400).json({ message: 'date (YYYY-MM-DD) is required.' });
-    }
 
     try {
         const [bookings] = await pool.query(
@@ -70,11 +65,6 @@ const getAttendanceForDate = async (req, res) => {
 
 const checkIn = async (req, res) => {
     const { booking_id, member_id, coach_id } = req.body;
-
-    if (!booking_id) return res.status(400).json({ message: 'booking_id is required.' });
-    if ((!member_id && !coach_id) || (member_id && coach_id)) {
-        return res.status(400).json({ message: 'Exactly one of member_id or coach_id is required.' });
-    }
 
     try {
         const data = await withTransaction(async (connection) => {

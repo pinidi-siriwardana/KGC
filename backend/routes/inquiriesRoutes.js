@@ -7,14 +7,17 @@ const {
     replyToInquiry,
     deleteInquiry,
 } = require('../controllers/inquiryController');
+const { validate } = require('../middleware/validate');
+const { idParam } = require('../validation/common');
+const { submitInquirySchema, replyToInquirySchema } = require('../validation/inquirySchemas');
 
 // Public - anyone can submit
-router.post('/', submitInquiry);
+router.post('/', validate(submitInquirySchema), submitInquiry);
 
 // Admin only
 router.get('/',      verifyToken, requireRole('admin'), getInquiries);
-router.get('/:id',   verifyToken, requireRole('admin'), getInquiry);
-router.post('/:id/reply',  verifyToken, requireRole('admin'), replyToInquiry);
-router.delete('/:id', verifyToken, requireRole('admin'), deleteInquiry);
+router.get('/:id',   verifyToken, requireRole('admin'), validate(idParam(), 'params'), getInquiry);
+router.post('/:id/reply',  verifyToken, requireRole('admin'), validate(idParam(), 'params'), validate(replyToInquirySchema), replyToInquiry);
+router.delete('/:id', verifyToken, requireRole('admin'), validate(idParam(), 'params'), deleteInquiry);
 
 module.exports = router;

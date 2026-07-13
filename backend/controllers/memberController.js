@@ -23,10 +23,6 @@ const getMembers = async (req, res) => {
 const createMember = async (req, res) => {
     const { username, password, full_name, email, phone, status, membership_type_id, start_date } = req.body;
 
-    if (!username || !password || !full_name || !email || !phone || !membership_type_id) {
-        return res.status(400).json({ message: 'username, password, full_name, email, phone and membership_type_id are required.' });
-    }
-
     try {
         const { member_id } = await withTransaction(async (connection) => {
             const [[membershipType]] = await connection.query(

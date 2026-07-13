@@ -6,18 +6,25 @@ const {
     createGuestLock, submitGuestPayment,
 } = require('../controllers/bookingController');
 const { uploadReceipt } = require('../middleware/upload');
+const { validate } = require('../middleware/validate');
+const { idParam } = require('../validation/common');
+const {
+    availabilityQuerySchema, getBookingsQuerySchema, createGuestLockSchema,
+    createBookingSchema, updateBookingStatusSchema,
+} = require('../validation/bookingSchemas');
 
 // Public: the single occupancy endpoint used by every booking grid (guest,
 // member, coach, admin alike), and the guest-booking widget on /courts — no
 // account needed for either.
-router.get('/availability', getAvailability);
-router.post('/guest-lock', createGuestLock);
-router.post('/guest-lock/:id/pay', uploadReceipt.single('receipt'), submitGuestPayment);
+router.get('/availability', validate(availabilityQuerySchema, 'query'), getAvailability);
+router.post('/guest-lock', validate(createGuestLockSchema), createGuestLock);
+// validate() runs AFTER upload — multer hasn't parsed req.body yet before that.
+router.post('/guest-lock/:id/pay', validate(idParam(), 'params'), uploadReceipt.single('receipt'), submitGuestPayment);
 
 router.use(verifyToken, requireRole('admin', 'member', 'coach'));
 
-router.get('/', getBookings);
-router.post('/', createBooking);
-router.patch('/:id', updateBookingStatus);
+router.get('/', validate(getBookingsQuerySchema, 'query'), getBookings);
+router.post('/', validate(createBookingSchema), createBooking);
+router.patch('/:id', validate(idParam(), 'params'), validate(updateBookingStatusSchema), updateBookingStatus);
 
 module.exports = router;
