@@ -401,6 +401,17 @@ const undoVerification = async (req, res) => {
         if (verification.status === 'pending') {
             return res.status(409).json({ message: 'This verification is already pending.' });
         }
+        // Unlike registration, an approved membership_renewal has no recorded
+        // link back to the exact membership/payment rows it created, so there's
+        // no safe way to reverse the grant here. Resetting this to 'pending'
+        // without reversing it would both leave a stale row that permanently
+        // blocks the member's future renewal submissions, and double-grant the
+        // membership if re-approved.
+        if (verification.payment_type === 'membership_renewal' && verification.status === 'approved') {
+            return res.status(409).json({
+                message: "Cannot undo an approved membership renewal — the granted membership term can't be safely reversed. Adjust the member's membership directly if it needs correcting."
+            });
+        }
 
         await withTransaction(async (connection) => {
             if (verification.payment_type === 'registration') {

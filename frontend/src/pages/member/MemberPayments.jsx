@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Wallet, Trophy, UserCheck, Receipt, Ban, Heart, FileUp, CheckCircle2, ExternalLink, UserX } from 'lucide-react';
+import { Plus, Wallet, Trophy, UserCheck, Receipt, Ban, Heart, CheckCircle2, ExternalLink, UserX } from 'lucide-react';
 import { apiFetch, API_URL } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
+import BankDetails from '../../components/common/BankDetails';
+import ReceiptUploadField from '../../components/common/ReceiptUploadField';
 
 const STATUS_OPTIONS = [
     { value: '', label: 'All Statuses' },
@@ -285,16 +287,7 @@ const MemberPayments = () => {
                         <p className="text-slate-600 text-sm leading-relaxed">
                             {settings?.payment_instructions || 'Loading instructions...'}
                         </p>
-                        <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-1">
-                            <p className="text-[9px] font-black uppercase text-slate-400">Bank</p>
-                            <p className="text-slate-900 text-sm font-bold">{settings?.bank_name}</p>
-                            <p className="text-[9px] font-black uppercase text-slate-400 pt-2">Account Name</p>
-                            <p className="text-slate-900 text-sm font-bold">{settings?.account_name}</p>
-                            <p className="text-[9px] font-black uppercase text-slate-400 pt-2">Account Number</p>
-                            <p className="text-slate-900 text-sm font-bold font-mono">{settings?.account_number}</p>
-                            <p className="text-[9px] font-black uppercase text-slate-400 pt-2">Branch</p>
-                            <p className="text-slate-900 text-sm font-bold">{settings?.branch}</p>
-                        </div>
+                        <BankDetails settings={settings} />
                     </div>
                 )}
 
@@ -350,14 +343,7 @@ const MemberPayments = () => {
 
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400">Payment Slip</label>
-                            <label className={`flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
-                                receiptFile ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 hover:border-emerald-300'
-                            }`}>
-                                <input type="file" accept="image/*,.pdf" className="hidden"
-                                    onChange={(e) => setReceiptFile(e.target.files[0])} />
-                                {receiptFile ? <CheckCircle2 className="text-emerald-600" size={18} /> : <FileUp className="text-slate-400" size={18} />}
-                                <span className="text-slate-600 text-xs font-bold">{receiptFile ? receiptFile.name : 'Upload JPG, PNG or PDF (Max 5MB)'}</span>
-                            </label>
+                            <ReceiptUploadField file={receiptFile} onChange={setReceiptFile} />
                         </div>
 
                         {error && <p className="text-red-500 text-[11px] font-bold">{error}</p>}

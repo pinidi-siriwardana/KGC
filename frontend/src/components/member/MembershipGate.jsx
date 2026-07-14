@@ -6,18 +6,32 @@ import MembershipExpired from '../../pages/member/MembershipExpired';
 // Gates every member portal route behind an active membership check. Fails
 // open on a network/5xx error so a transient API blip doesn't lock out a
 // member who is actually in good standing.
+const POLL_INTERVAL_MS = 20000;
+
 const MembershipGate = () => {
     const [state, setState] = useState({ loading: true, data: null, error: false });
 
-    useEffect(() => {
+    const fetchMe = () =>
         apiFetch('/api/member/me')
             .then((res) => {
                 if (!res.ok) throw new Error('Failed to load member profile.');
                 return res.json();
             })
             .then((data) => setState({ loading: false, data, error: false }))
-            .catch(() => setState({ loading: false, data: null, error: true }));
+            .catch(() => setState((prev) => (prev.loading ? { loading: false, data: null, error: true } : prev)));
+
+    useEffect(() => {
+        fetchMe();
     }, []);
+
+    // While access is blocked (pending renewal review), keep re-checking so
+    // the member regains the real portal the moment an admin approves it —
+    // no re-login required.
+    useEffect(() => {
+        if (!state.data?.access_blocked) return;
+        const interval = setInterval(fetchMe, POLL_INTERVAL_MS);
+        return () => clearInterval(interval);
+    }, [state.data?.access_blocked]);
 
     if (state.loading) {
         return (
