@@ -45,8 +45,9 @@ const GROUP_EXPR = {
     month: `DATE_FORMAT(p.payment_date, '%Y-%m-01')`,
 };
 
-const getRevenueSummary = async (req, res) => {
-    const { from, to, type, search, groupBy = 'day' } = req.query;
+// Shared by the /summary HTTP handler and the admin dashboard overview,
+// which both need the exact same totals/trend computation.
+const fetchRevenueSummary = async ({ from, to, type, search, groupBy = 'day' } = {}) => {
     const { effectiveFrom, effectiveTo } = resolveRange(from, to);
     const { whereClause, values } = buildConditions({ type, search, effectiveFrom, effectiveTo });
     const groupExpr = GROUP_EXPR[groupBy];
@@ -57,55 +58,59 @@ const getRevenueSummary = async (req, res) => {
     const prevFrom = toISODate(new Date(new Date(prevTo).getTime() - (rangeDays - 1) * 86400000));
     const { whereClause: prevWhereClause, values: prevValues } = buildConditions({ type, search, effectiveFrom: prevFrom, effectiveTo: prevTo });
 
+    const [[totals]] = await pool.query(
+        `SELECT COALESCE(SUM(p.amount), 0) AS total_revenue,
+                COUNT(*) AS transaction_count,
+                COALESCE(AVG(p.amount), 0) AS average_amount
+         FROM payments p ${PAYER_JOIN} ${whereClause}`,
+        values
+    );
+
+    const [byType] = await pool.query(
+        `SELECT p.payment_type, COALESCE(SUM(p.amount), 0) AS total, COUNT(*) AS count
+         FROM payments p ${PAYER_JOIN} ${whereClause}
+         GROUP BY p.payment_type
+         ORDER BY total DESC`,
+        values
+    );
+
+    const [timeseries] = await pool.query(
+        `SELECT ${groupExpr} AS period, COALESCE(SUM(p.amount), 0) AS total
+         FROM payments p ${PAYER_JOIN} ${whereClause}
+         GROUP BY period
+         ORDER BY period ASC`,
+        values
+    );
+
+    const [[prevTotals]] = await pool.query(
+        `SELECT COALESCE(SUM(p.amount), 0) AS total_revenue
+         FROM payments p ${PAYER_JOIN} ${prevWhereClause}`,
+        prevValues
+    );
+
+    const previousRevenue = Number(prevTotals.total_revenue);
+    const currentRevenue = Number(totals.total_revenue);
+    const trendPercent = previousRevenue > 0
+        ? ((currentRevenue - previousRevenue) / previousRevenue) * 100
+        : (currentRevenue > 0 ? 100 : 0);
+
+    return {
+        range: { from: effectiveFrom, to: effectiveTo, groupBy },
+        totalRevenue: currentRevenue,
+        transactionCount: Number(totals.transaction_count),
+        averageAmount: Number(totals.average_amount),
+        previousRevenue,
+        trendPercent,
+        byType,
+        timeseries,
+    };
+};
+
+const getRevenueSummary = async (req, res) => {
+    const { from, to, type, search, groupBy } = req.query;
     try {
-        const [[totals]] = await pool.query(
-            `SELECT COALESCE(SUM(p.amount), 0) AS total_revenue,
-                    COUNT(*) AS transaction_count,
-                    COALESCE(AVG(p.amount), 0) AS average_amount
-             FROM payments p ${PAYER_JOIN} ${whereClause}`,
-            values
-        );
-
-        const [byType] = await pool.query(
-            `SELECT p.payment_type, COALESCE(SUM(p.amount), 0) AS total, COUNT(*) AS count
-             FROM payments p ${PAYER_JOIN} ${whereClause}
-             GROUP BY p.payment_type
-             ORDER BY total DESC`,
-            values
-        );
-
-        const [timeseries] = await pool.query(
-            `SELECT ${groupExpr} AS period, COALESCE(SUM(p.amount), 0) AS total
-             FROM payments p ${PAYER_JOIN} ${whereClause}
-             GROUP BY period
-             ORDER BY period ASC`,
-            values
-        );
-
-        const [[prevTotals]] = await pool.query(
-            `SELECT COALESCE(SUM(p.amount), 0) AS total_revenue
-             FROM payments p ${PAYER_JOIN} ${prevWhereClause}`,
-            prevValues
-        );
-
-        const previousRevenue = Number(prevTotals.total_revenue);
-        const currentRevenue = Number(totals.total_revenue);
-        const trendPercent = previousRevenue > 0
-            ? ((currentRevenue - previousRevenue) / previousRevenue) * 100
-            : (currentRevenue > 0 ? 100 : 0);
-
-        res.json({
-            data: {
-                range: { from: effectiveFrom, to: effectiveTo, groupBy },
-                totalRevenue: currentRevenue,
-                transactionCount: Number(totals.transaction_count),
-                averageAmount: Number(totals.average_amount),
-                previousRevenue,
-                trendPercent,
-                byType,
-                timeseries,
-            },
-        });
+        const data = await fetchRevenueSummary({ from, to, type, search, groupBy });
+        res.json({ data });
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch revenue summary.', error: err.message });
     }
@@ -132,4 +137,4 @@ const getRevenueTransactions = async (req, res) => {
     }
 };
 
-module.exports = { getRevenueSummary, getRevenueTransactions };
+module.exports = { getRevenueSummary, getRevenueTransactions, fetchRevenueSummary };
