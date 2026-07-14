@@ -11,7 +11,7 @@ const emptyCreateForm = () => ({
     booking_type: 'member',
     member_id: '', coach_id: '',
     guest_mode: 'existing', guest_id: '', guest_full_name: '', guest_phone: '', guest_email: '',
-    amount_charged: '',
+    amount_charged: '', note: '',
 });
 
 const STATUS_STYLE = {
@@ -41,6 +41,7 @@ const AdminBookings = () => {
     const [loadingBookings, setLoadingBookings] = useState(true);
 
     const [cancellationFee, setCancellationFee] = useState(null);
+    const [guestBookingFee, setGuestBookingFee] = useState(null);
     const [editingFee, setEditingFee] = useState(false);
     const [feeInput, setFeeInput] = useState('');
     const [savingFee, setSavingFee] = useState(false);
@@ -51,7 +52,10 @@ const AdminBookings = () => {
         apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
         apiFetch('/api/coaches').then((res) => res.json()).then((data) => setCoaches(data.data || []));
         apiFetch('/api/guests').then((res) => res.json()).then((data) => setGuests(Array.isArray(data) ? data : []));
-        apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
+        apiFetch('/api/settings').then((res) => res.json()).then((data) => {
+            setCancellationFee(data.data?.cancellation_fee ?? null);
+            setGuestBookingFee(data.data?.guest_booking_fee ?? null);
+        });
     }, []);
 
     const handleEditFee = () => {
@@ -143,6 +147,7 @@ const AdminBookings = () => {
             payload.coach_id = createForm.coach_id;
         } else {
             payload.amount_charged = createForm.amount_charged || 0;
+            payload.note = createForm.note || null;
             if (createForm.guest_mode === 'existing') {
                 payload.guest_id = createForm.guest_id;
             } else {
@@ -372,7 +377,15 @@ const AdminBookings = () => {
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400">Booking For</label>
                             <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                                value={createForm.booking_type} onChange={(e) => setCreateForm({ ...createForm, booking_type: e.target.value })}>
+                                value={createForm.booking_type} onChange={(e) => {
+                                    const booking_type = e.target.value;
+                                    const shouldPrefillFee = booking_type === 'guest' && !createForm.amount_charged && guestBookingFee != null;
+                                    setCreateForm({
+                                        ...createForm,
+                                        booking_type,
+                                        amount_charged: shouldPrefillFee ? guestBookingFee : createForm.amount_charged,
+                                    });
+                                }}>
                                 <option value="member">Existing Member</option>
                                 <option value="coach">Existing Coach</option>
                                 <option value="guest">Guest</option>
@@ -449,6 +462,15 @@ const AdminBookings = () => {
                                     <label className="text-[9px] font-black uppercase text-slate-400">Amount Charged (LKR)</label>
                                     <input type="number" step="0.01" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                         value={createForm.amount_charged} onChange={(e) => setCreateForm({ ...createForm, amount_charged: e.target.value })} required />
+                                    {guestBookingFee != null && (
+                                        <p className="text-[10px] text-slate-400 font-bold pt-0.5">Standard guest fee: LKR {guestBookingFee}</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400">Payment Note (optional)</label>
+                                    <input type="text" placeholder="e.g. Paid cash at front desk" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        value={createForm.note} onChange={(e) => setCreateForm({ ...createForm, note: e.target.value })} />
                                 </div>
                             </div>
                         )}

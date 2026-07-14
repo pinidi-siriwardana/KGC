@@ -19,48 +19,61 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
 
   const menuConfig = {
     admin: [
-      { group: "Operations", items: [
-        { name: 'Live Bookings', icon: CalendarClock, path: '/admin/bookings' },
-        { name: 'Court Status', icon: Trophy, path: '/admin/courts' },
-        { name: 'Master Schedule', icon: Timer, path: '/admin/schedule' },
-      ]},
-      { group: "People", items: [
-        { name: 'Join Requests', icon: UserPlus, path: '/admin/requests' },
-        { name: 'Member Directory', icon: Users, path: '/admin/members' },
-        { name: 'Coach Profiles', icon: UserCheck, path: '/admin/coaches' },
-        { name: 'Guest Directory', icon: UserPlus, path: '/admin/guests' },
-        { name: 'Inquiries', icon: MessageSquare, path: '/admin/inquiries' },
-        { name: 'Daily Attendance', icon: ClipboardCheck, path: '/admin/attendance' },
-        { name: 'Access Management', icon: UserCog, path: '/admin/users' },
-      ]},
-      { group: "Finance", items: [
-        { name: 'Verify Receipts', icon: ShieldCheck, path: '/admin/verify-payments' },
-        { name: 'Payment Flow', icon: CreditCard, path: '/admin/payments' },
-        { name: 'Membership Plans', icon: Trophy, path: '/admin/membership-types' },
-        { name: 'Revenue Reports', icon: BarChart3, path: '/admin/reports' },
-      ]}
+      {
+        group: "Operations", items: [
+          { name: 'Live Bookings', icon: CalendarClock, path: '/admin/bookings' },
+          { name: 'Court Status', icon: Trophy, path: '/admin/courts' },
+          { name: 'Daily Attendance', icon: ClipboardCheck, path: '/admin/attendance' },
+          { name: 'Inquiries', icon: MessageSquare, path: '/admin/inquiries' },
+        ]
+      },
+      {
+        group: "Profiles", items: [
+          { name: 'Member Directory', icon: Users, path: '/admin/members' },
+          { name: 'Coach Profiles', icon: UserCheck, path: '/admin/coaches' },
+          { name: 'Guest Directory', icon: UserPlus, path: '/admin/guests' },
+          { name: 'Access Management', icon: UserCog, path: '/admin/users' },
+        ]
+      },
+      {
+        group: "Payments", items: [
+          { name: 'Verify Receipts', icon: ShieldCheck, path: '/admin/verify-payments' },
+          { name: 'Payment Flow', icon: CreditCard, path: '/admin/payments' },
+          { name: 'Membership Plans', icon: Trophy, path: '/admin/membership-types' },
+          { name: 'Revenue Reports', icon: BarChart3, path: '/admin/reports' },
+        ]
+      },
+
     ],
     member: [
-      { group: "Reservations", items: [
-        { name: 'Book a Court', icon: PlusCircle, path: '/member/book' },
-        { name: 'My Schedule', icon: CalendarClock, path: '/member/schedule' },
-        { name: 'Booking History', icon: History, path: '/member/history' },
-      ]},
-      { group: "Account", items: [
-        { name: 'Membership Info', icon: Trophy, path: '/member/status' },
-        { name: 'My Payments', icon: CreditCard, path: '/member/payments' },
-        { name: 'Profile Settings', icon: UserCog, path: '/member/profile' },
-      ]}
+      {
+        group: "Reservations", items: [
+          { name: 'Book a Court', icon: PlusCircle, path: '/member/book' },
+          { name: 'My Schedule', icon: CalendarClock, path: '/member/schedule' },
+          { name: 'Booking History', icon: History, path: '/member/history' },
+        ]
+      },
+      {
+        group: "Account", items: [
+          { name: 'Membership Info', icon: Trophy, path: '/member/status' },
+          { name: 'My Payments', icon: CreditCard, path: '/member/payments' },
+          { name: 'Profile Settings', icon: UserCog, path: '/member/profile' },
+        ]
+      }
     ],
     coach: [
-      { group: "Training", items: [
-        { name: 'Reserve Court', icon: PlusCircle, path: '/coach/book' },
-        { name: 'My Students', icon: Users, path: '/coach/students' },
-        { name: 'Session Logs', icon: Timer, path: '/coach/sessions' },
-      ]},
-      { group: "Finance", items: [
-        { name: 'Earnings & Payments', icon: CreditCard, path: '/coach/payments' },
-      ]}
+      {
+        group: "Training", items: [
+          { name: 'Reserve Court', icon: PlusCircle, path: '/coach/book' },
+          { name: 'My Students', icon: Users, path: '/coach/students' },
+          { name: 'Session Logs', icon: Timer, path: '/coach/sessions' },
+        ]
+      },
+      {
+        group: "Finance", items: [
+          { name: 'Earnings & Payments', icon: CreditCard, path: '/coach/payments' },
+        ]
+      }
     ]
   };
 
@@ -99,11 +112,10 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
                     key={item.name}
                     to={item.path}
                     onClick={closeMobileMenu}
-                    className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all group no-underline ${
-                      isActive
+                    className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all group no-underline ${isActive
                         ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
                         : 'text-gray-400 hover:bg-white/5 hover:text-white border border-transparent'
-                    }`}
+                      }`}
                   >
                     <item.icon size={18} className={isActive ? 'text-amber-500' : 'text-gray-500 group-hover:text-amber-500 transition-colors'} />
                     <span className="text-[11px] font-bold uppercase tracking-widest">{item.name}</span>
@@ -132,8 +144,8 @@ const DashboardLayout = () => {
   // DYNAMIC ROLE DETECTION
   // Splits "/admin/dashboard" into ["", "admin", "dashboard"] and takes index 1
   const pathSegments = location.pathname.split('/');
-  const detectedRole = pathSegments[1]; 
-  
+  const detectedRole = pathSegments[1];
+
   // Validate that the role is one of our keys, otherwise default to admin
   const role = ['admin', 'member', 'coach'].includes(detectedRole) ? detectedRole : 'admin';
 
@@ -148,7 +160,7 @@ const DashboardLayout = () => {
 
   return (
     <div className="flex h-screen bg-white overflow-hidden font-sans">
-      
+
       {/* MOBILE SIDEBAR OVERLAY */}
       <div className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${isSidebarOpen ? "visible opacity-100" : "invisible opacity-0"}`}>
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
@@ -164,7 +176,7 @@ const DashboardLayout = () => {
 
       {/* MAIN WHITE SIDE */}
       <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
-        
+
         <header className="h-20 border-b border-gray-100 flex items-center justify-between px-6 lg:px-8 bg-white/80 backdrop-blur-md z-20">
           <div className="flex items-center gap-4">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg">

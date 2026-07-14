@@ -301,9 +301,9 @@ const createBooking = async (req, res) => {
 
             if (booking_type === 'guest' && amount_charged > 0) {
                 await connection.query(
-                    `INSERT INTO payments (amount, payment_date, payment_type, member_id, coach_id, booking_id, handled_by, status)
-                     VALUES (?, NOW(), 'booking_fee', NULL, NULL, ?, ?, 'completed')`,
-                    [amount_charged, booking_id, req.user.user_id]
+                    `INSERT INTO payments (amount, payment_date, payment_type, member_id, coach_id, booking_id, handled_by, status, notes)
+                     VALUES (?, NOW(), 'booking_fee', NULL, NULL, ?, ?, 'completed', ?)`,
+                    [amount_charged, booking_id, req.user.user_id, req.body.note || null]
                 );
             }
 
