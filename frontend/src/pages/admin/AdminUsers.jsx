@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserCheck, Shield, UserCog, Trash2, Plus, Mail, MoreVertical } from 'lucide-react';
+import { UserCheck, Shield, UserCog, Trash2, Plus } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
@@ -28,6 +28,15 @@ const AdminUsers = () => {
     const [roleFilter, setRoleFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
 
+    const currentUserId = (() => {
+        try {
+            return JSON.parse(localStorage.getItem('user') || 'null')?.user_id;
+        } catch {
+            return undefined;
+        }
+    })();
+    const editingSelf = editingUser?.user_id === currentUserId;
+
     const filteredUsers = useMemo(() => {
         const q = search.trim().toLowerCase();
         return users.filter((u) => {
@@ -52,10 +61,11 @@ const AdminUsers = () => {
             const data = await res.json();
             setUsers(data.data || []);
         } catch (err) {
-            console.error("Failed to fetch users:", err.message);
+            console.error('Failed to fetch users:', err.message);
             // Optionally set an error state here to show in the UI
         }
     };
+
     const handleOpenModal = (user = null) => {
         if (user) {
             setEditingUser(user);
@@ -72,38 +82,46 @@ const AdminUsers = () => {
         const url = editingUser ? `/api/users/update/${editingUser.user_id}` : '/api/users/add';
         const method = editingUser ? 'PUT' : 'POST';
 
-        const res = await apiFetch(url, {
-            method,
-            body: JSON.stringify(formData)
-        });
+        try {
+            const res = await apiFetch(url, {
+                method,
+                body: JSON.stringify(formData)
+            });
 
-        if (res.ok) {
-            setIsModalOpen(false);
-            fetchUsers();
-        }
-    };
-
-    // 1. Add this function inside your AdminUsers component
-    const handleDelete = async (id) => {
-        if (window.confirm("Are you sure you want to delete this user? This cannot be undone.")) {
-            try {
-                const res = await apiFetch(`/api/users/delete/${id}`, {
-                    method: 'DELETE',
-                });
-
-                if (res.ok) {
-                    // Refresh the list after successful deletion
-                    fetchUsers();
-                } else {
-                    alert("Failed to delete user. Check backend console.");
-                }
-            } catch (err) {
-                console.error("Delete error:", err);
+            if (res.ok) {
+                setIsModalOpen(false);
+                fetchUsers();
+            } else {
+                const err = await res.json();
+                alert(err.message || 'Failed to save user.');
             }
+        } catch (err) {
+            console.error('Save error:', err);
+            alert('Check your internet or server connection.');
         }
     };
 
+    const handleDelete = async (id) => {
+        if (id === currentUserId) {
+            alert('You cannot delete your own account.');
+            return;
+        }
+        if (!window.confirm('Are you sure you want to delete this user? This cannot be undone.')) return;
 
+        try {
+            const res = await apiFetch(`/api/users/delete/${id}`, { method: 'DELETE' });
+
+            if (res.ok) {
+                fetchUsers();
+            } else {
+                const err = await res.json();
+                alert(err.message || 'Failed to delete user.');
+            }
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('Check your internet or server connection.');
+        }
+    };
 
     return (
         <div className="p-6">
@@ -114,9 +132,8 @@ const AdminUsers = () => {
                         <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Control system roles and login permissions</p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3">
-                        <FilterSelect value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} options={ROLE_OPTIONS} />
-                        <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
-                        <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search username..." className="w-full sm:w-56" />
+                        <FilterSelect size={16} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} options={ROLE_OPTIONS} />
+                        <FilterSelect size={16} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
                         <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-2 text-[10px] bg-slate-900 text-white font-black px-4 py-2 rounded-lg uppercase tracking-widest hover:bg-slate-800 transition-all">
                             <Plus size={14} /> Create New User
                         </button>
@@ -141,13 +158,23 @@ const AdminUsers = () => {
                                             <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
                                                 {u.role === 'admin' ? <Shield size={16} /> : <UserCog size={16} />}
                                             </div>
-                                            <p className="text-slate-900 text-sm font-bold">{u.username}</p>
+                                            <p className="text-slate-900 text-sm font-bold">
+                                                {u.username}
+                                                {u.user_id === currentUserId && (
+                                                    <span className="ml-2 text-[8px] font-black uppercase text-emerald-600 align-middle">You</span>
+                                                )}
+                                            </p>
                                         </div>
                                     </td>
                                     <td className="p-4">
-                                        <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md border ${u.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                                                u.role === 'coach' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-50 text-slate-600 border-slate-100'
-                                            }`}>
+                                        <span
+                                            className={`text-[9px] font-black uppercase px-2 py-1 rounded-md border ${u.role === 'admin'
+                                                ? 'bg-purple-50 text-purple-600 border-purple-100'
+                                                : u.role === 'coach'
+                                                    ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                                    : 'bg-slate-50 text-slate-600 border-slate-100'
+                                                }`}
+                                        >
                                             {u.role}
                                         </span>
                                     </td>
@@ -160,12 +187,14 @@ const AdminUsers = () => {
                                     <td className="p-4 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                             <button onClick={() => handleOpenModal(u)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><UserCheck size={16} /></button>
-                                            <button
-                                                onClick={() => handleDelete(u.user_id)} // Make sure it's user_id, not id
-                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            {u.user_id !== currentUserId && (
+                                                <button
+                                                    onClick={() => handleDelete(u.user_id)}
+                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -204,7 +233,7 @@ const AdminUsers = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 ml-1">System Role</label>
-                                <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer"
+                                <select disabled={editingSelf} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                     value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
                                     <option value="member">Member</option>
                                     <option value="coach">Coach</option>
@@ -213,7 +242,7 @@ const AdminUsers = () => {
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Account Status</label>
-                                <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer"
+                                <select disabled={editingSelf} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                     value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
                                     <option value="active">Active</option>
                                     <option value="pending">Pending</option>
@@ -221,6 +250,11 @@ const AdminUsers = () => {
                                 </select>
                             </div>
                         </div>
+                        {editingSelf && (
+                            <p className="text-slate-400 text-[10px] leading-relaxed">
+                                You can&apos;t change your own role or status — ask another administrator to do it.
+                            </p>
+                        )}
                     </div>
                 </Modal>
             </div>

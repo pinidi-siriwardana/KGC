@@ -3,6 +3,19 @@ const { hashPassword } = require('../utils/password');
 
 const SAFE_FIELDS = 'user_id, username, role, status, created_at';
 
+// True if removing/demoting/disabling `id` would leave the system with zero
+// active administrators — checked by counting every *other* active admin.
+const isLastActiveAdmin = async (id) => {
+    const [[target]] = await pool.query('SELECT role, status FROM users WHERE user_id = ?', [id]);
+    if (!target || target.role !== 'admin' || target.status !== 'active') return false;
+
+    const [[{ c }]] = await pool.query(
+        "SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND status = 'active' AND user_id != ?",
+        [id]
+    );
+    return c === 0;
+};
+
 const getUsers = async (req, res) => {
     try {
         const [rows] = await pool.query(`SELECT ${SAFE_FIELDS} FROM users ORDER BY created_at DESC`);
@@ -34,7 +47,23 @@ const updateUser = async (req, res) => {
     const { id } = req.params;
     const { username, password, role, status } = req.body;
 
+    // An admin editing their own account can't demote or disable themselves —
+    // there'd be no one left with access to undo it.
+    if (id === req.user.user_id) {
+        if (role !== undefined && role !== 'admin') {
+            return res.status(400).json({ message: 'You cannot change your own role.' });
+        }
+        if (status !== undefined && status !== 'active') {
+            return res.status(400).json({ message: 'You cannot disable your own account.' });
+        }
+    }
+
     try {
+        const demotingOrDisabling = (role !== undefined && role !== 'admin') || (status !== undefined && status !== 'active');
+        if (demotingOrDisabling && (await isLastActiveAdmin(id))) {
+            return res.status(400).json({ message: 'Cannot remove the last active administrator.' });
+        }
+
         const fields = [];
         const values = [];
 
@@ -68,7 +97,15 @@ const updateUser = async (req, res) => {
 const deleteUser = async (req, res) => {
     const { id } = req.params;
 
+    if (id === req.user.user_id) {
+        return res.status(400).json({ message: 'You cannot delete your own account.' });
+    }
+
     try {
+        if (await isLastActiveAdmin(id)) {
+            return res.status(400).json({ message: 'Cannot delete the last active administrator.' });
+        }
+
         const [result] = await pool.query('DELETE FROM users WHERE user_id = ?', [id]);
 
         if (result.affectedRows === 0) {

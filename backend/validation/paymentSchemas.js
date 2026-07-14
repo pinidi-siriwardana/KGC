@@ -71,6 +71,7 @@ const reviewVerificationSchema = z.object({
 });
 
 module.exports = {
+    paymentTypeEnum,
     getPaymentsQuerySchema, createManualPaymentSchema, updatePaymentSchema,
     editVerificationSchema, reviewVerificationSchema,
 };

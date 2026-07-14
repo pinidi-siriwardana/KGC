@@ -24,6 +24,7 @@ import AdminInquiries from './pages/admin/AdminInquiries';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import AdminBookings from './pages/admin/AdminBookings';
 import AdminAttendance from './pages/admin/AdminAttendance';
+import AdminReports from './pages/admin/AdminReports';
 
 import MemberHome from './pages/member/MemberHome';
 import MemberAnnouncements from './pages/member/MemberAnnouncements';
@@ -77,6 +78,7 @@ const MainContent = () => {
               <Route path="/admin/verify-payments" element={<AdminReciepts />} />
               <Route path="/admin/payments" element={<AdminPayments />} />
               <Route path="/admin/membership-types" element={<AdminMembershipTypes />} />
+              <Route path="/admin/reports" element={<AdminReports />} />
               <Route path="/admin/courts" element={<AdminCourts />} />
               <Route path="/admin/inquiries" element={<AdminInquiries />} />
               <Route path="/admin/announcements" element={<AdminAnnouncements />} />
