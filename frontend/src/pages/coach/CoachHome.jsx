@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PlusCircle, Users, CreditCard, Activity, Timer, UserCheck } from 'lucide-react';
+import { PlusCircle, Wallet, CreditCard, Activity, Timer, UserCheck, CalendarCheck } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
 import CourtWeather from '../../components/common/CourtWeather';
 import { apiFetch } from '../../utils/api';
@@ -13,6 +13,7 @@ const CATEGORY_BORDER = {
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const formatLKR = (n) => `LKR ${Number(n || 0).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
 
 const CoachHome = () => {
   const navigate = useNavigate();
@@ -21,7 +22,10 @@ const CoachHome = () => {
   const [coach, setCoach] = useState(null);
   const [upcomingBookings, setUpcomingBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [sessionStats, setSessionStats] = useState({ thisMonth: 0, lastMonth: 0 });
   const [courtStats, setCourtStats] = useState({ totalDays: 0, totalHours: 0, bestPartner: null });
+  const [financials, setFinancials] = useState({ paidToClub: 0, paidCount: 0, outstanding: [] });
+  const [loadingFinancials, setLoadingFinancials] = useState(true);
 
   useEffect(() => {
     apiFetch('/api/attendance/my-stats')
@@ -49,14 +53,47 @@ const CoachHome = () => {
     apiFetch('/api/bookings')
       .then((res) => res.json())
       .then((data) => {
-        const upcoming = (data.data || [])
+        const bookings = data.data || [];
+        const upcoming = bookings
           .filter((b) => b.booking_date >= todayISO() && ['pending', 'confirmed'].includes(b.status))
           .sort((a, b) => (a.booking_date + a.start_time).localeCompare(b.booking_date + b.start_time));
         setUpcomingBookings(upcoming.slice(0, 4));
+
+        const thisMonthKey = todayISO().slice(0, 7);
+        const lastMonthDate = new Date();
+        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const lastMonthKey = lastMonthDate.toISOString().slice(0, 7);
+
+        const confirmed = bookings.filter((b) => b.status === 'confirmed');
+        setSessionStats({
+          thisMonth: confirmed.filter((b) => b.booking_date.startsWith(thisMonthKey)).length,
+          lastMonth: confirmed.filter((b) => b.booking_date.startsWith(lastMonthKey)).length,
+        });
       })
       .catch(() => setUpcomingBookings([]))
       .finally(() => setLoadingBookings(false));
   }, []);
+
+  useEffect(() => {
+    apiFetch('/api/coach/payments')
+      .then((res) => res.json())
+      .then((data) => {
+        const payments = data.payments || [];
+        const completed = payments.filter((p) => p.status === 'completed');
+        const outstanding = payments.filter((p) => p.status === 'recorded');
+        setFinancials({
+          paidToClub: completed.reduce((sum, p) => sum + Number(p.amount), 0),
+          paidCount: completed.length,
+          outstanding,
+        });
+      })
+      .catch(() => setFinancials({ paidToClub: 0, paidCount: 0, outstanding: [] }))
+      .finally(() => setLoadingFinancials(false));
+  }, []);
+
+  const sessionTrend = sessionStats.lastMonth > 0
+    ? `${sessionStats.thisMonth >= sessionStats.lastMonth ? '+' : ''}${Math.round(((sessionStats.thisMonth - sessionStats.lastMonth) / sessionStats.lastMonth) * 100)}% vs Last Month`
+    : (sessionStats.thisMonth > 0 ? 'New This Month' : 'No Sessions Yet');
 
   return (
     <div className="relative space-y-10 animate-in fade-in duration-700">
@@ -86,9 +123,14 @@ const CoachHome = () => {
       {/* Coach Stats Grid */}
       <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Note: Ensure StatCard internals use dark text like text-slate-800 */}
-        <StatCard label="Monthly Sessions" value="42" trend="+8% vs Last Month" icon={Activity} />
-        <StatCard label="Total Students" value="12" trend="3 New Requests" icon={Users} />
-        <StatCard label="Earnings" value="LKR 125k" trend="Paid to Club" icon={CreditCard} />
+        <StatCard label="Monthly Sessions" value={loadingBookings ? '···' : sessionStats.thisMonth} trend={loadingBookings ? undefined : sessionTrend} icon={Activity} />
+        <StatCard label="Upcoming Sessions" value={loadingBookings ? '···' : upcomingBookings.length} trend="Reserved" icon={CalendarCheck} />
+        <StatCard
+          label="Paid to Club"
+          value={loadingFinancials ? '···' : formatLKR(financials.paidToClub)}
+          trend={loadingFinancials ? undefined : `${financials.paidCount} payment${financials.paidCount === 1 ? '' : 's'}`}
+          icon={Wallet}
+        />
         <StatCard
           label="Hours on Court"
           value={`${courtStats.totalHours}h`}
@@ -151,22 +193,39 @@ const CoachHome = () => {
         <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
             <h3 className="text-slate-800 text-lg font-serif italic mb-6">Pending Dues</h3>
             <p className="text-slate-500 text-[10px] uppercase mb-8 leading-relaxed">
-                Please verify receipts for the following bookings to secure your slot.
+                Outstanding fees awaiting settlement with the club.
             </p>
-            
-            <div className="space-y-6">
-                <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <div>
-                        <p className="text-slate-800 text-xs font-bold">Booking #921</p>
-                        <p className="text-amber-600 text-[9px] font-black uppercase">LKR 2,500</p>
+
+            <div className="space-y-4">
+                {loadingFinancials && (
+                    <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black text-center py-4">Loading...</p>
+                )}
+                {!loadingFinancials && financials.outstanding.length === 0 && (
+                    <div className="flex items-center justify-center p-5 border border-dashed border-slate-200 rounded-2xl bg-slate-50/30">
+                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">No outstanding dues</p>
                     </div>
-                    <button className="p-2 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all">
-                        <CreditCard size={14} />
-                    </button>
-                </div>
+                )}
+                {financials.outstanding.slice(0, 4).map((p) => (
+                    <div key={p.payment_id} className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div>
+                            <p className="text-slate-800 text-xs font-bold capitalize">{p.payment_type.replace(/_/g, ' ')}</p>
+                            <p className="text-amber-600 text-[9px] font-black uppercase">{formatLKR(p.amount)}</p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/coach/payments')}
+                            className="p-2 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all"
+                            title="Settle this fee"
+                        >
+                            <CreditCard size={14} />
+                        </button>
+                    </div>
+                ))}
             </div>
-            
-            <button className="w-full mt-10 py-4 border border-slate-200 rounded-xl text-[9px] text-slate-500 uppercase tracking-widest font-black hover:bg-slate-950 hover:text-white hover:border-slate-950 transition-all shadow-sm">
+
+            <button
+                onClick={() => navigate('/coach/payments')}
+                className="w-full mt-10 py-4 border border-slate-200 rounded-xl text-[9px] text-slate-500 uppercase tracking-widest font-black hover:bg-slate-950 hover:text-white hover:border-slate-950 transition-all shadow-sm"
+            >
                 View Transaction History
             </button>
         </div>
