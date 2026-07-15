@@ -3,6 +3,7 @@ import { CalendarDays, Info, FileUp, CheckCircle2, Clock } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
 import Modal from '../../components/common/Modal';
+import BankDetails from '../../components/common/BankDetails';
 import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -149,33 +150,33 @@ const GuestBooking = () => {
     const handleModalSubmit = step === 'details' ? handleDetailsSubmit : step === 'payment' ? handlePaymentSubmit : handleDoneSubmit;
 
     return (
-        <section id="book" className="relative bg-obsidian py-24 px-6 lg:px-20 overflow-hidden">
+        <section id="book" className="relative bg-alabaster py-24 px-6 lg:px-20 overflow-hidden border-t border-obsidian/5">
             <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald/5 blur-[150px] rounded-full pointer-events-none" />
 
             <div className="max-w-6xl mx-auto relative z-10 space-y-10">
                 <div className="space-y-4">
-                    <h2 className="text-white text-4xl md:text-5xl font-serif italic">
+                    <h2 className="text-obsidian text-4xl md:text-5xl font-serif italic">
                         Book a Court, <span className="text-emerald">Guest Access.</span>
                     </h2>
-                    <p className="text-white/40 max-w-2xl text-sm leading-relaxed">
+                    <p className="text-muted max-w-2xl text-sm leading-relaxed">
                         Select an open slot below to reserve it. No account needed.
                     </p>
                 </div>
 
                 {/* Instructions — always visible, before the grid */}
-                <div className="flex gap-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6">
-                    <Info size={20} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex gap-4 bg-amber-50 border border-amber-200 rounded-2xl p-6">
+                    <Info size={20} className="text-amber-500 shrink-0 mt-0.5" />
                     <div className="space-y-1">
-                        <p className="text-amber-300 text-xs font-black uppercase tracking-widest">Before You Book</p>
-                        <p className="text-white/50 text-sm leading-relaxed">
-                            Confirming a court requires payment. Clicking an open slot below will <span className="text-white/80 font-bold">hold it for 5 minutes</span> while
+                        <p className="text-amber-700 text-xs font-black uppercase tracking-widest">Before You Book</p>
+                        <p className="text-obsidian/60 text-sm leading-relaxed">
+                            Confirming a court requires payment. Clicking an open slot below will <span className="text-obsidian font-bold">hold it for 5 minutes</span> while
                             you transfer the fee and upload your payment slip. If the 5 minutes run out before you submit, the slot becomes available to others again —
                             so have your payment ready, or be quick with the transfer.
                         </p>
                     </div>
                 </div>
 
-                <div className="bg-white/[0.03] border border-white/5 rounded-club p-8 space-y-6">
+                <div className="bg-white border border-obsidian/5 shadow-sm rounded-club p-8 space-y-6">
                     <div className="flex items-center gap-3">
                         <CalendarDays size={16} className="text-emerald" />
                         <input
@@ -183,7 +184,7 @@ const GuestBooking = () => {
                             min={todayISO()}
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="px-4 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-white outline-none"
+                            className="px-4 py-2 bg-alabaster border border-obsidian/10 rounded-xl text-sm text-obsidian outline-none"
                         />
                     </div>
 
@@ -193,7 +194,6 @@ const GuestBooking = () => {
                         stateMap={stateMap}
                         onSelectSlot={handleSelectSlot}
                         selectedKey={pendingSlot ? slotKey(pendingSlot.court.court_id, pendingSlot.slot.slot_id) : null}
-                        dark
                     />
                 </div>
             </div>
@@ -241,16 +241,15 @@ const GuestBooking = () => {
                             <span className="text-[9px] font-bold uppercase tracking-widest">remaining to complete payment</span>
                         </div>
 
-                        <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-1">
-                            <p className="text-[9px] font-black uppercase text-slate-400">{settings?.payment_instructions}</p>
-                            <p className="text-slate-900 text-lg font-bold font-mono mt-2">LKR {settings?.guest_booking_fee}</p>
-                            <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                                <div><p className="text-[9px] font-black uppercase text-slate-400">Bank</p><p className="font-bold text-slate-800">{settings?.bank_name}</p></div>
-                                <div><p className="text-[9px] font-black uppercase text-slate-400">Account Name</p><p className="font-bold text-slate-800">{settings?.account_name}</p></div>
-                                <div><p className="text-[9px] font-black uppercase text-slate-400">Account Number</p><p className="font-bold text-slate-800 font-mono">{settings?.account_number}</p></div>
-                                <div><p className="text-[9px] font-black uppercase text-slate-400">Branch</p><p className="font-bold text-slate-800">{settings?.branch}</p></div>
-                            </div>
-                        </div>
+                        <BankDetails
+                            settings={settings}
+                            note={
+                                <>
+                                    <p className="text-[9px] font-black uppercase text-slate-400">{settings?.payment_instructions}</p>
+                                    <p className="text-slate-900 text-lg font-bold font-mono mt-2 mb-3">LKR {settings?.guest_booking_fee}</p>
+                                </>
+                            }
+                        />
 
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400">Note (optional)</label>

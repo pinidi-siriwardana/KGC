@@ -5,9 +5,9 @@ const { getSettings, updateSettings } = require('../controllers/settingsControll
 const { validate } = require('../middleware/validate');
 const { updateSettingsSchema } = require('../validation/settingsSchemas');
 
-router.use(verifyToken);
-
+// Public: the guest booking flow (no login) needs bank/fee details to render
+// its payment step — same reasoning as membership-types and courts being public.
 router.get('/', getSettings);
-router.patch('/', requireRole('admin'), validate(updateSettingsSchema), updateSettings);
+router.patch('/', verifyToken, requireRole('admin'), validate(updateSettingsSchema), updateSettings);
 
 module.exports = router;

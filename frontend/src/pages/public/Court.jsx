@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import Hero from "../../components/courts/Hero";
 import GuestBooking from "../../components/courts/GuestBooking";
+import PaymentPolicy from "../../components/courts/PaymentPolicy";
 import CourtDetails from "../../components/courts/CourtDetails";
 import CourtRules from "../../components/courts/CourtRules";
 
@@ -21,6 +22,7 @@ function Courts () {
         <>
           <Hero />
             <GuestBooking />
+            <PaymentPolicy />
             <CourtDetails />
             <CourtRules />
         </>

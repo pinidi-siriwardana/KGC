@@ -1,6 +1,5 @@
 import React from 'react';
-import CoachCard from '../common/CoachCard'; 
-import { MoveRight } from 'lucide-react';
+import CoachCard from '../common/CoachCard';
 import rohanImg from "../../assets/images/rohan.jpg";
 import saranImg from "../../assets/images/saran.jpg";
 import devinImg from "../../assets/images/devin.jpg";
@@ -55,13 +54,6 @@ const CoachSection = () => {
           <h3 className="text-white text-3xl lg:text-4xl font-serif italic max-w-3xl mx-auto leading-[1.4]">
             "Tennis is more than a game; it's a century-old tradition of discipline and sporting elegance."
           </h3>
-
-          {/* Symmetrical Action Link */}
-          <div className="mt-10 flex justify-center">
-             <button className="text-emerald hover:text-white transition-colors flex items-center gap-2 text-[10px] font-black uppercase tracking-registry group">
-               View Program Standards <MoveRight size={16} className="group-hover:translate-x-2 transition-transform" />
-             </button>
-          </div>
         </div>
 
       </div>

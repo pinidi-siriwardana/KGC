@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom'; // Added for internal navigation
-import { ArrowRight, Trophy, Play, Star, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Trophy, Star, ShieldCheck } from 'lucide-react';
 import courtImg from "../../assets/images/court-hero.jpg";
 
 const ShadowCourtHero = () => {
@@ -44,14 +44,6 @@ const ShadowCourtHero = () => {
                 Book A Court
                 <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />
               </Link>
-
-              {/* SECONDARY ACTION: Modal or Video trigger */}
-              <button className="flex items-center gap-4 group">
-                <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center text-white group-hover:bg-white group-hover:text-obsidian transition-all duration-500 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]">
-                  <Play size={20} fill="currentColor" />
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-registry text-white/40 group-hover:text-white transition-colors">Virtual Tour</span>
-              </button>
             </div>
           </div>
 
