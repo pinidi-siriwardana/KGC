@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { PlusCircle, Calendar, Trophy, Bell, Clock, Timer, Users } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
+import CourtWeather from '../../components/common/CourtWeather';
 import { apiFetch } from '../../utils/api';
 
 const CATEGORY_BORDER = {
@@ -102,6 +103,10 @@ const MemberHome = () => {
           trend={courtStats.bestPartner ? `${courtStats.bestPartner.sessions} sessions together` : 'Play more to find out'}
           icon={Users}
         />
+      </div>
+
+      <div className="relative z-10">
+        <CourtWeather />
       </div>
 
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8">

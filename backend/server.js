@@ -21,6 +21,7 @@ const timeSlotsRoutes = require('./routes/timeSlotsRoutes');
 const bookingsRoutes = require('./routes/bookingsRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const weatherRoutes = require('./routes/weatherRoutes');
 const logger = require('./middleware/logger');
 
 const app = express();
@@ -52,6 +53,7 @@ app.use('/api/time-slots', timeSlotsRoutes);
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/weather', weatherRoutes);
 
 // --- Health Check ---
 app.get('/', (req, res) => {

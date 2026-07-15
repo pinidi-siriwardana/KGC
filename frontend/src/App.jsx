@@ -46,6 +46,9 @@ import CoachPayments from './pages/coach/CoachPayments';
 import CoachProfile from './pages/coach/CoachProfile';
 import CoachInquiry from './pages/coach/CoachInquiry';
 
+import WeatherForecast from './pages/common/WeatherForecast';
+import FitnessCalculator from './pages/common/FitnessCalculator';
+
 const MainContent = () => {
   const location = useLocation();
 
@@ -106,8 +109,11 @@ const MainContent = () => {
                 <Route path="/member/profile" element={<MemberProfile />} />
                 <Route path="/member/status" element={<MembershipInfo />} />
               </Route>
-              {/* Outside the gate — a blocked/expired member still needs a way to reach admin */}
+              {/* Outside the gate — a blocked/expired member still needs a way to reach admin,
+                  and weather/fitness tools aren't tied to membership status either */}
               <Route path="/member/inquiry" element={<MemberInquiry />} />
+              <Route path="/member/weather" element={<WeatherForecast />} />
+              <Route path="/member/fitness" element={<FitnessCalculator />} />
             </Route>
           </Route>
 
@@ -121,6 +127,8 @@ const MainContent = () => {
               <Route path="/coach/payments" element={<CoachPayments />} />
               <Route path="/coach/profile" element={<CoachProfile />} />
               <Route path="/coach/inquiry" element={<CoachInquiry />} />
+              <Route path="/coach/weather" element={<WeatherForecast />} />
+              <Route path="/coach/fitness" element={<FitnessCalculator />} />
             </Route>
           </Route>
         </Routes>

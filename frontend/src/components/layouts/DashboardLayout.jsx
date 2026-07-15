@@ -4,7 +4,8 @@ import {
   LayoutDashboard, CalendarClock, Trophy, Timer,
   Users, UserCheck, UserPlus, MessageSquare,
   ShieldCheck, ClipboardCheck, CreditCard,
-  BarChart3, Megaphone, LogOut, PlusCircle, History, UserCog, Menu, X
+  BarChart3, Megaphone, LogOut, PlusCircle, History, UserCog, Menu, X,
+  CloudSun, Activity
 } from 'lucide-react';
 
 const SidebarContent = ({ role, closeMobileMenu }) => {
@@ -60,25 +61,36 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
           { name: 'Contact Admin', icon: MessageSquare, path: '/member/inquiry' },
           { name: 'Profile Settings', icon: UserCog, path: '/member/profile' },
         ]
+      },
+      {
+        group: "Tools", items: [
+          { name: 'Weather Forecast', icon: CloudSun, path: '/member/weather' },
+          { name: 'BMI & Calories', icon: Activity, path: '/member/fitness' },
+        ]
       }
     ],
     coach: [
       {
         group: "Training", items: [
           { name: 'Reserve Court', icon: PlusCircle, path: '/coach/book' },
-          { name: 'My Students', icon: Users, path: '/coach/students' },
           { name: 'Session Logs', icon: Timer, path: '/coach/sessions' },
         ]
       },
       {
         group: "Finance", items: [
-          { name: 'Earnings & Payments', icon: CreditCard, path: '/coach/payments' },
+          { name: 'Payments', icon: CreditCard, path: '/coach/payments' },
         ]
       },
       {
         group: "Account", items: [
           { name: 'Contact Admin', icon: MessageSquare, path: '/coach/inquiry' },
           { name: 'Profile Settings', icon: UserCog, path: '/coach/profile' },
+        ]
+      },
+      {
+        group: "Tools", items: [
+          { name: 'Weather Forecast', icon: CloudSun, path: '/coach/weather' },
+          { name: 'BMI & Calories', icon: Activity, path: '/coach/fitness' },
         ]
       }
     ]
@@ -120,8 +132,8 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
                     to={item.path}
                     onClick={closeMobileMenu}
                     className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all group no-underline ${isActive
-                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                        : 'text-gray-400 hover:bg-white/5 hover:text-white border border-transparent'
+                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                      : 'text-gray-400 hover:bg-white/5 hover:text-white border border-transparent'
                       }`}
                   >
                     <item.icon size={18} className={isActive ? 'text-amber-500' : 'text-gray-500 group-hover:text-amber-500 transition-colors'} />

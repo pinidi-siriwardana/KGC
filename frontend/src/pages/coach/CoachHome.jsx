@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PlusCircle, Users, CreditCard, Activity, Timer, UserCheck } from 'lucide-react';
 import StatCard from '../../components/common/StatCard';
+import CourtWeather from '../../components/common/CourtWeather';
 import { apiFetch } from '../../utils/api';
 
 const CATEGORY_BORDER = {
@@ -102,8 +103,12 @@ const CoachHome = () => {
         />
       </div>
 
+      <div className="relative z-10">
+        <CourtWeather />
+      </div>
+
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Today's Schedule */}
         <div className="lg:col-span-2 bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
           <div className="flex justify-between items-center mb-8">
