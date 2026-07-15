@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import HeroImg from '../../assets/images/tennisPlayer.jpg';
+import NextAvailableSlot from './NextAvailableSlot';
 
 const Hero = () => {
   return (
@@ -37,9 +38,12 @@ const Hero = () => {
         </h1>
 
         {/* Organized Subtext */}
-        <p className="text-white/80 text-lg md:text-2xl font-light leading-relaxed max-w-2xl mx-auto mb-12">
+        <p className="text-white/80 text-lg md:text-2xl font-light leading-relaxed max-w-2xl mx-auto mb-8">
           Step onto the historic courts of the Kandy Garden Club. Experience a century of tradition revitalized with high-performance energy.
         </p>
+
+        {/* Live Availability Nudge */}
+        <NextAvailableSlot />
 
         {/* Centered Action Buttons */}
         <div className="flex flex-wrap justify-center gap-6 w-full">
