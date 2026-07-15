@@ -32,6 +32,7 @@ import MemberBook from './pages/member/MemberBook';
 import MemberSchedule from './pages/member/MemberSchedule';
 import MemberHistory from './pages/member/MemberHistory';
 import MemberPayments from './pages/member/MemberPayments';
+import MemberProfile from './pages/member/MemberProfile';
 import MembershipGate from './components/member/MembershipGate';
 
 
@@ -40,6 +41,7 @@ import CoachAnnouncements from './pages/coach/CoachAnnouncements';
 import CoachBook from './pages/coach/CoachBook';
 import CoachSessions from './pages/coach/CoachSessions';
 import CoachPayments from './pages/coach/CoachPayments';
+import CoachProfile from './pages/coach/CoachProfile';
 
 const MainContent = () => {
   const location = useLocation();
@@ -98,6 +100,7 @@ const MainContent = () => {
                 <Route path="/member/schedule" element={<MemberSchedule />} />
                 <Route path="/member/history" element={<MemberHistory />} />
                 <Route path="/member/payments" element={<MemberPayments />} />
+                <Route path="/member/profile" element={<MemberProfile />} />
               </Route>
             </Route>
           </Route>
@@ -110,6 +113,7 @@ const MainContent = () => {
               <Route path="/coach/book" element={<CoachBook />} />
               <Route path="/coach/sessions" element={<CoachSessions />} />
               <Route path="/coach/payments" element={<CoachPayments />} />
+              <Route path="/coach/profile" element={<CoachProfile />} />
             </Route>
           </Route>
         </Routes>

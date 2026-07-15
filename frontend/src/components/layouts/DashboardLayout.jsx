@@ -73,6 +73,11 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
         group: "Finance", items: [
           { name: 'Earnings & Payments', icon: CreditCard, path: '/coach/payments' },
         ]
+      },
+      {
+        group: "Account", items: [
+          { name: 'Profile Settings', icon: UserCog, path: '/coach/profile' },
+        ]
       }
     ]
   };

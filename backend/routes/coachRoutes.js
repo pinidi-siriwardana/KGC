@@ -1,16 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, requireRole } = require('../middleware/auth');
-const { getMe } = require('../controllers/coachPortalController');
+const { getMe, updateMe } = require('../controllers/coachPortalController');
 const { getMyPayments, submitPayment, payOutstandingFee, getDuesSummary } = require('../controllers/coachPaymentController');
 const { uploadReceipt } = require('../middleware/upload');
 const { validate } = require('../middleware/validate');
 const { idParam } = require('../validation/common');
 const { submitPaymentSchema, payOutstandingFeeSchema } = require('../validation/coachPaymentSchemas');
+const { updateProfileSchema } = require('../validation/profileSchemas');
 
 router.use(verifyToken, requireRole('coach'));
 
 router.get('/me', getMe);
+router.patch('/me', validate(updateProfileSchema), updateMe);
 router.get('/payments/dues-summary', getDuesSummary);
 router.get('/payments', getMyPayments);
 // validate() runs AFTER upload — multer hasn't parsed req.body yet before that.
