@@ -57,6 +57,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
         group: "Account", items: [
           { name: 'Membership Info', icon: Trophy, path: '/member/status' },
           { name: 'My Payments', icon: CreditCard, path: '/member/payments' },
+          { name: 'Contact Admin', icon: MessageSquare, path: '/member/inquiry' },
           { name: 'Profile Settings', icon: UserCog, path: '/member/profile' },
         ]
       }
@@ -76,6 +77,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
       },
       {
         group: "Account", items: [
+          { name: 'Contact Admin', icon: MessageSquare, path: '/coach/inquiry' },
           { name: 'Profile Settings', icon: UserCog, path: '/coach/profile' },
         ]
       }

@@ -33,6 +33,8 @@ import MemberSchedule from './pages/member/MemberSchedule';
 import MemberHistory from './pages/member/MemberHistory';
 import MemberPayments from './pages/member/MemberPayments';
 import MemberProfile from './pages/member/MemberProfile';
+import MembershipInfo from './pages/member/MembershipInfo';
+import MemberInquiry from './pages/member/MemberInquiry';
 import MembershipGate from './components/member/MembershipGate';
 
 
@@ -42,6 +44,7 @@ import CoachBook from './pages/coach/CoachBook';
 import CoachSessions from './pages/coach/CoachSessions';
 import CoachPayments from './pages/coach/CoachPayments';
 import CoachProfile from './pages/coach/CoachProfile';
+import CoachInquiry from './pages/coach/CoachInquiry';
 
 const MainContent = () => {
   const location = useLocation();
@@ -101,7 +104,10 @@ const MainContent = () => {
                 <Route path="/member/history" element={<MemberHistory />} />
                 <Route path="/member/payments" element={<MemberPayments />} />
                 <Route path="/member/profile" element={<MemberProfile />} />
+                <Route path="/member/status" element={<MembershipInfo />} />
               </Route>
+              {/* Outside the gate — a blocked/expired member still needs a way to reach admin */}
+              <Route path="/member/inquiry" element={<MemberInquiry />} />
             </Route>
           </Route>
 
@@ -114,6 +120,7 @@ const MainContent = () => {
               <Route path="/coach/sessions" element={<CoachSessions />} />
               <Route path="/coach/payments" element={<CoachPayments />} />
               <Route path="/coach/profile" element={<CoachProfile />} />
+              <Route path="/coach/inquiry" element={<CoachInquiry />} />
             </Route>
           </Route>
         </Routes>
