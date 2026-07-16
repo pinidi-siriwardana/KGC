@@ -451,7 +451,7 @@ const AdminBookings = () => {
                                     <div className="grid grid-cols-2 gap-3">
                                         <input type="text" placeholder="Full Name" className="col-span-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                             value={createForm.guest_full_name} onChange={(e) => setCreateForm({ ...createForm, guest_full_name: e.target.value })} required />
-                                        <input type="text" placeholder="Phone" className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        <input type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                             value={createForm.guest_phone} onChange={(e) => setCreateForm({ ...createForm, guest_phone: e.target.value })} required />
                                         <input type="email" placeholder="Email (optional)" className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                             value={createForm.guest_email} onChange={(e) => setCreateForm({ ...createForm, guest_email: e.target.value })} />

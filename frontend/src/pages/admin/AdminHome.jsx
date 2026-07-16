@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Users, DollarSign, Activity, CalendarCheck, TrendingUp, TrendingDown,
-    ShieldCheck, MessageSquare, Trophy, UserCheck, ArrowRight, ClipboardCheck,
+    ShieldCheck, MessageSquare, Trophy, UserCheck, ArrowRight, ClipboardCheck, AlertTriangle,
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import StatCard from '../../components/common/StatCard';
@@ -105,6 +105,31 @@ const AdminHome = () => {
                     <p className="text-emerald-600 font-mono text-sm">OPERATIONAL</p>
                 </div>
             </header>
+
+            {/* Highlighted notification: members registered without a plan yet */}
+            {!loading && overview?.membersAwaitingPlan?.count > 0 && (
+                <div className="relative z-10 flex items-start gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-6 py-5 shadow-sm">
+                    <div className="p-2 bg-amber-500/10 rounded-xl shrink-0">
+                        <AlertTriangle className="text-amber-600" size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-amber-800 text-sm font-black uppercase tracking-wide">
+                            {overview.membersAwaitingPlan.count} member{overview.membersAwaitingPlan.count > 1 ? 's' : ''} awaiting a membership plan
+                        </p>
+                        <p className="text-amber-700/80 text-[11px] mt-1">
+                            {overview.membersAwaitingPlan.recent.map((m) => m.full_name).join(', ')}
+                            {overview.membersAwaitingPlan.count > overview.membersAwaitingPlan.recent.length ? ', …' : ''}
+                            {' '}registered with no plan selected — assign one from Payments to collect their fee.
+                        </p>
+                    </div>
+                    <Link
+                        to="/admin/payments"
+                        className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-all no-underline"
+                    >
+                        Assign Plan
+                    </Link>
+                </div>
+            )}
 
             {/* Stats Grid */}
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

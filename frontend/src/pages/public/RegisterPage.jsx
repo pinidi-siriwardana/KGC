@@ -158,7 +158,7 @@ const RegisterPage = () => {
                   <label className="text-[9px] font-black uppercase tracking-registry text-emerald/80 ml-1 group-focus-within:text-amber transition-colors">Phone</label>
                   <div className="relative">
                     <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-amber transition-colors" size={16} />
-                    <input type="tel" name="phone" placeholder="+94 7..." required
+                    <input type="tel" name="phone" placeholder="07XXXXXXXX or +947XXXXXXXX" required
                       value={formData.phone} onChange={handleChange}
                       className="w-full bg-white/[0.03] border border-white/5 rounded-2xl py-4 pl-12 pr-6 text-white text-sm outline-none focus:border-amber/50 focus:ring-4 focus:ring-amber/10 transition-all placeholder:text-white/5" />
                   </div>

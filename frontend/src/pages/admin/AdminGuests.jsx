@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { UserPlus, Edit3, Trash2, Search, Phone, Mail } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { UserPlus, Edit3, Trash2, Search, Phone, Mail, RotateCcw } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import { apiFetch } from '../../utils/api';
+
+const UNDO_TIMEOUT_MS = 8000;
 
 const GuestDashboard = () => {
     const [guests, setGuests] = useState([]);
@@ -10,6 +12,10 @@ const GuestDashboard = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingGuest, setEditingGuest] = useState(null);
     const [formData, setFormData] = useState({ full_name: '', phone: '', email: '' });
+    const [undoInfo, setUndoInfo] = useState(null);
+    const undoTimerRef = useRef(null);
+
+    useEffect(() => () => clearTimeout(undoTimerRef.current), []);
 
     // Initial Load
     useEffect(() => { 
@@ -83,28 +89,59 @@ const fetchGuests = async (searchQuery = "") => {
         }
     };
 
-    // 4. DELETE (Matches your DELETE route)
-    const handleDelete = async (id) => {
-        if (window.confirm("Are you sure you want to delete this guest? This cannot be undone.")) {
-            try {
-                const res = await apiFetch(`/api/guests/${id}`, {
-                    method: 'DELETE'
-                });
+    // 4. DELETE (soft-delete — the guest can be brought back with Undo)
+    const handleDelete = async (guest) => {
+        if (!window.confirm(`Remove ${guest.full_name} from the guest directory?`)) return;
 
-                if (res.ok) {
-                    fetchGuests(searchTerm); // Refresh list
-                } else {
-                    const err = await res.json();
-                    alert(err.message || "Delete failed");
-                }
-            } catch (err) {
-                console.error("Delete request failed", err);
+        try {
+            const res = await apiFetch(`/api/guests/${guest.guest_id}`, {
+                method: 'DELETE'
+            });
+
+            if (res.ok) {
+                fetchGuests(searchTerm); // Refresh list
+                clearTimeout(undoTimerRef.current);
+                setUndoInfo({ guest_id: guest.guest_id, full_name: guest.full_name });
+                undoTimerRef.current = setTimeout(() => setUndoInfo(null), UNDO_TIMEOUT_MS);
+            } else {
+                const err = await res.json();
+                alert(err.message || "Delete failed");
             }
+        } catch (err) {
+            console.error("Delete request failed", err);
+        }
+    };
+
+    const handleUndoDelete = async () => {
+        if (!undoInfo) return;
+        clearTimeout(undoTimerRef.current);
+
+        const res = await apiFetch(`/api/guests/${undoInfo.guest_id}/restore`, { method: 'PATCH' });
+        if (res.ok) {
+            setUndoInfo(null);
+            fetchGuests(searchTerm);
+        } else {
+            const err = await res.json();
+            alert(err.message || "Restore failed");
         }
     };
 
     return (
         <div className="p-8 bg-slate-50 min-h-screen">
+            {undoInfo && (
+                <div className="mb-6 flex items-center gap-4 bg-slate-900 text-white rounded-2xl px-5 py-3.5 shadow-lg">
+                    <p className="text-xs font-semibold flex-1">
+                        <span className="font-black">{undoInfo.full_name}</span> removed from the guest directory.
+                    </p>
+                    <button
+                        onClick={handleUndoDelete}
+                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-all"
+                    >
+                        <RotateCcw size={12} /> Undo
+                    </button>
+                </div>
+            )}
+
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter text-glow">Guest Directory</h1>
@@ -169,8 +206,8 @@ const fetchGuests = async (searchQuery = "") => {
                                         >
                                             <Edit3 size={16} />
                                         </button>
-                                        <button 
-                                            onClick={() => handleDelete(guest.guest_id)} 
+                                        <button
+                                            onClick={() => handleDelete(guest)}
                                             className="p-2.5 hover:bg-rose-50 rounded-xl text-slate-300 hover:text-rose-500 transition-all"
                                             title="Delete Guest"
                                         >
@@ -212,8 +249,8 @@ const fetchGuests = async (searchQuery = "") => {
                         <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-2 px-1">Primary Mobile</label>
                         <input
                             required
-                            type="text"
-                            placeholder="+94 ..."
+                            type="tel"
+                            placeholder="07XXXXXXXX or +947XXXXXXXX"
                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-4 focus:ring-slate-900/5 focus:border-slate-200 outline-none transition-all"
                             value={formData.phone}
                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}

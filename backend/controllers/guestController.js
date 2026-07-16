@@ -6,10 +6,10 @@ const getGuests = async (req, res) => {
     try {
         const [rows] = search
             ? await pool.query(
-                  `SELECT * FROM guests WHERE full_name LIKE ? OR phone LIKE ? ORDER BY created_at DESC`,
+                  `SELECT * FROM guests WHERE is_deleted = 0 AND (full_name LIKE ? OR phone LIKE ?) ORDER BY created_at DESC`,
                   [`%${search}%`, `%${search}%`]
               )
-            : await pool.query('SELECT * FROM guests ORDER BY created_at DESC');
+            : await pool.query('SELECT * FROM guests WHERE is_deleted = 0 ORDER BY created_at DESC');
 
         res.json(rows);
     } catch (err) {
@@ -51,20 +51,40 @@ const updateGuest = async (req, res) => {
     }
 };
 
+// Soft-delete: a hard DELETE would throw a raw FK error for any guest who
+// has ever made a court booking (bookings.guest_id has no ON DELETE
+// action). Hiding the row instead keeps booking history intact and lets
+// the admin undo the removal.
 const deleteGuest = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const [result] = await pool.query('DELETE FROM guests WHERE guest_id = ?', [id]);
+        const [result] = await pool.query('UPDATE guests SET is_deleted = 1 WHERE guest_id = ? AND is_deleted = 0', [id]);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Guest not found.' });
         }
 
-        res.json({ message: 'Guest deleted.' });
+        res.json({ message: 'Guest removed.' });
     } catch (err) {
         res.status(500).json({ message: 'Failed to delete guest.', error: err.message });
     }
 };
 
-module.exports = { getGuests, createGuest, updateGuest, deleteGuest };
+const restoreGuest = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const [result] = await pool.query('UPDATE guests SET is_deleted = 0 WHERE guest_id = ? AND is_deleted = 1', [id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Guest not found.' });
+        }
+
+        res.json({ message: 'Guest restored.' });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to restore guest.', error: err.message });
+    }
+};
+
+module.exports = { getGuests, createGuest, updateGuest, deleteGuest, restoreGuest };

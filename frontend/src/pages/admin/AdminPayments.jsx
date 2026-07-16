@@ -426,6 +426,7 @@ const AdminPayments = () => {
                     <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                         value={formData.purpose} onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}>
                         <option value="new_member">New Member Registration</option>
+                        <option value="assign_plan">Assign Membership Plan (Existing Member)</option>
                         <option value="new_coach">New Coach Registration</option>
                         <option value="misc">Miscellaneous</option>
                     </select>
@@ -471,9 +472,43 @@ const AdminPayments = () => {
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400">Phone</label>
-                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                <input type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                     value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required />
                             </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Membership Plan</label>
+                                <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.membership_type_id} onChange={handlePlanChange} required>
+                                    <option value="" disabled>Select a plan...</option>
+                                    {membershipTypes.map((t) => (
+                                        <option key={t.membership_type_id} value={t.membership_type_id}>
+                                            {t.name} — LKR {t.price} / {t.duration_months}mo
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400">Start Date</label>
+                                <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} required />
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {formData.purpose === 'assign_plan' && (
+                    <>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400">Member</label>
+                            <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                value={formData.member_id} onChange={(e) => setFormData({ ...formData, member_id: e.target.value })} required>
+                                <option value="" disabled>Select a member...</option>
+                                {members.map((m) => (
+                                    <option key={m.member_id} value={m.member_id}>{m.full_name} — {m.email}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
@@ -524,7 +559,7 @@ const AdminPayments = () => {
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400">Phone</label>
-                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                <input type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                     value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required />
                             </div>
                         </div>

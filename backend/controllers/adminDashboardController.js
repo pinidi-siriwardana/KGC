@@ -60,6 +60,20 @@ const fetchRecentActivity = async () => {
     return activity.slice(0, 8);
 };
 
+// Members registered with no plan yet (createMember allows skipping the
+// plan) still owe a membership fee — surfaced on the dashboard so admins
+// don't lose track of them.
+const fetchMembersAwaitingPlan = async () => {
+    const [rows] = await pool.query(
+        `SELECT m.member_id, m.full_name, m.created_at
+         FROM members m
+         LEFT JOIN memberships ms ON ms.member_id = m.member_id
+         WHERE ms.membership_id IS NULL
+         ORDER BY m.created_at DESC`
+    );
+    return rows;
+};
+
 const getDashboardOverview = async (req, res) => {
     try {
         const [
@@ -72,6 +86,7 @@ const getDashboardOverview = async (req, res) => {
             [[unreadInquiries]],
             [[checkedIn]],
             recentActivity,
+            membersAwaitingPlan,
         ] = await Promise.all([
             fetchRevenueSummary({ groupBy: 'day' }),
             pool.query(`SELECT COUNT(*) AS total, SUM(status = 'active') AS active FROM members`),
@@ -82,6 +97,7 @@ const getDashboardOverview = async (req, res) => {
             pool.query(`SELECT COUNT(*) AS count FROM contact_inquiries WHERE status = 'unread' AND is_deleted = 0`),
             pool.query(`SELECT COUNT(*) AS count FROM attendance WHERE checkout_time IS NULL`),
             fetchRecentActivity(),
+            fetchMembersAwaitingPlan(),
         ]);
 
         res.json({
@@ -99,6 +115,10 @@ const getDashboardOverview = async (req, res) => {
                 unreadInquiries: Number(unreadInquiries.count),
                 checkedInNow: Number(checkedIn.count),
                 recentActivity,
+                membersAwaitingPlan: {
+                    count: membersAwaitingPlan.length,
+                    recent: membersAwaitingPlan.slice(0, 5),
+                },
             },
         });
     } catch (err) {

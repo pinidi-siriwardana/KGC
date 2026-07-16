@@ -164,7 +164,7 @@ const ContactSection = () => {
                                                 value={formData.phone}
                                                 onChange={handleChange}
                                                 className="w-full bg-alabaster border border-obsidian/5 rounded-2xl py-5 px-6 text-obsidian focus:ring-2 focus:ring-emerald outline-none transition-all placeholder:text-obsidian/20 font-medium"
-                                                placeholder="+94 7X XXX XXXX"
+                                                placeholder="07XXXXXXXX or +947XXXXXXXX"
                                             />
                                         </div>
                                     </div>

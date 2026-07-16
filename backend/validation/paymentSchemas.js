@@ -48,9 +48,19 @@ const miscPaymentSchema = z.object({
     member_id: z.coerce.number().int().positive().optional(),
 });
 
+// Assigns a plan to an existing member (e.g. one registered with no plan
+// yet) and records the matching payment in one step.
+const assignPlanPaymentSchema = z.object({
+    purpose: z.literal('assign_plan'),
+    ...manualPaymentBase,
+    member_id: z.coerce.number().int().positive('member_id is required'),
+    membership_type_id: z.coerce.number().int().positive('membership_type_id is required'),
+    start_date: dateString.optional(),
+});
+
 const createManualPaymentSchema = z.discriminatedUnion('purpose', [
-    newMemberPaymentSchema, newCoachPaymentSchema, miscPaymentSchema,
-], { error: "purpose must be one of 'new_member', 'new_coach', 'misc'." });
+    newMemberPaymentSchema, newCoachPaymentSchema, miscPaymentSchema, assignPlanPaymentSchema,
+], { error: "purpose must be one of 'new_member', 'new_coach', 'misc', 'assign_plan'." });
 
 const updatePaymentSchema = z.object({
     amount: positiveAmount.optional(),

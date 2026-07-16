@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const pool = require('./config/db');
+const { ensureSchema } = require('./utils/schemaBootstrap');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const memberRoutes = require('./routes/memberRoutes');
@@ -23,6 +24,8 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const weatherRoutes = require('./routes/weatherRoutes');
 const logger = require('./middleware/logger');
+
+ensureSchema().catch((err) => console.error('Schema bootstrap failed:', err.message));
 
 const app = express();
 

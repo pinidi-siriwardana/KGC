@@ -190,7 +190,7 @@ const AdminCoaches = () => {
                         </div>
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Phone Number</label>
-                            <input type="text" required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                            <input type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                 value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
                         </div>
                     </div>

@@ -55,7 +55,11 @@ const AdminMembers = () => {
   const handleOpenModal = (member = null) => {
     if (member) {
       setEditingMember(member);
-      setFormData(member);
+      setFormData({
+        ...member,
+        membership_type_id: member.membership_type_id || '',
+        start_date: member.membership_start_date ? member.membership_start_date.slice(0, 10) : todayISO(),
+      });
     } else {
       setEditingMember(null);
       setFormData(emptyFormData());
@@ -74,12 +78,28 @@ const AdminMembers = () => {
       body: JSON.stringify(formData)
     });
 
-    if (res.ok) {
-      setIsModalOpen(false);
-      fetchMembers();
-    } else {
-      alert("Error saving member.");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.message || "Error saving member.");
+      return;
     }
+
+    // Editing an existing member doesn't touch their plan via /update — that
+    // goes through the dedicated membership endpoint so the linked payment
+    // stays in sync, and only runs if a plan is actually selected.
+    if (editingMember && formData.membership_type_id) {
+      const planRes = await apiFetch(`/api/members/${editingMember.member_id}/membership`, {
+        method: 'PUT',
+        body: JSON.stringify({ membership_type_id: formData.membership_type_id, start_date: formData.start_date }),
+      });
+      if (!planRes.ok) {
+        const err = await planRes.json().catch(() => ({}));
+        alert(err.message || "Member details saved, but updating the plan failed.");
+      }
+    }
+
+    setIsModalOpen(false);
+    fetchMembers();
   };
 
   const handleDelete = async (id) => {
@@ -171,27 +191,31 @@ const AdminMembers = () => {
               </div>
             </div>
           )}
-          {!editingMember && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase text-slate-400">Membership Plan</label>
-                <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                  value={formData.membership_type_id} onChange={(e) => setFormData({...formData, membership_type_id: e.target.value})} required>
-                  <option value="" disabled>Select a plan...</option>
-                  {membershipTypes.map((t) => (
-                    <option key={t.membership_type_id} value={t.membership_type_id}>
-                      {t.name} — LKR {t.price} / {t.duration_months}mo
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase text-slate-400">Start Date</label>
-                <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
-                  value={formData.start_date} onChange={(e) => setFormData({...formData, start_date: e.target.value})} required />
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase text-slate-400">Membership Plan</label>
+              <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                value={formData.membership_type_id} onChange={(e) => setFormData({...formData, membership_type_id: e.target.value})}>
+                <option value="">No plan yet — pay later</option>
+                {membershipTypes.map((t) => (
+                  <option key={t.membership_type_id} value={t.membership_type_id}>
+                    {t.name} — LKR {t.price} / {t.duration_months}mo
+                  </option>
+                ))}
+              </select>
+              <p className="text-[9px] text-slate-400">
+                {editingMember
+                  ? 'Changing the plan updates the matching payment to the new price.'
+                  : 'Selecting a plan records it as paid. Leave unselected to add the plan and payment later.'}
+              </p>
             </div>
-          )}
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase text-slate-400">Start Date</label>
+              <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                value={formData.start_date} onChange={(e) => setFormData({...formData, start_date: e.target.value})}
+                disabled={!formData.membership_type_id} />
+            </div>
+          </div>
           <div className="space-y-1">
             <label className="text-[9px] font-black uppercase text-slate-400">Full Name</label>
             <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" 
@@ -205,7 +229,7 @@ const AdminMembers = () => {
             </div>
             <div className="space-y-1">
               <label className="text-[9px] font-black uppercase text-slate-400">Phone</label>
-              <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none" 
+              <input type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                 value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} required />
             </div>
           </div>

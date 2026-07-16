@@ -2,7 +2,10 @@ const pool = require('../config/db');
 const { withTransaction } = pool;
 const { hashPassword } = require('../utils/password');
 const { createMemberAccount } = require('../utils/memberAccount');
-const { CURRENT_MEMBERSHIP_SELECT, CURRENT_MEMBERSHIP_JOIN } = require('../utils/membership');
+const {
+    CURRENT_MEMBERSHIP_SELECT, CURRENT_MEMBERSHIP_JOIN,
+    assignOrUpdateMembership, syncMembershipPayment,
+} = require('../utils/membership');
 
 const getMembers = async (req, res) => {
     try {
@@ -25,25 +28,21 @@ const createMember = async (req, res) => {
 
     try {
         const { member_id } = await withTransaction(async (connection) => {
-            const [[membershipType]] = await connection.query(
-                'SELECT duration_months, price FROM membership_types WHERE membership_type_id = ?',
-                [membership_type_id]
-            );
-
-            if (!membershipType) {
-                const err = new Error('Invalid membership_type_id.');
-                err.statusCode = 400;
-                throw err;
-            }
-
             const password_hash = await hashPassword(password);
             const { member_id, user_id } = await createMemberAccount(connection, { username, password_hash, full_name, email, phone, status });
 
-            await connection.query(
-                `INSERT INTO memberships (member_id, membership_type_id, purchase_price, start_date, end_date, status)
-                 VALUES (?, ?, ?, COALESCE(?, CURDATE()), DATE_ADD(COALESCE(?, CURDATE()), INTERVAL ? MONTH), 'active')`,
-                [member_id, membership_type_id, membershipType.price, start_date || null, start_date || null, membershipType.duration_months]
-            );
+            // No plan selected: create the member account only. They can be
+            // assigned a plan (and the matching payment) later from Payments
+            // or the Member Directory's edit option.
+            if (membership_type_id) {
+                const { membershipId, price } = await assignOrUpdateMembership(connection, { member_id, membership_type_id, start_date });
+                // Selecting a plan at registration means the admin collected
+                // payment for it, so it's recorded on the payments ledger too.
+                await syncMembershipPayment(connection, {
+                    member_id, membershipId, amount: price, payment_date: start_date,
+                    handledBy: req.user.user_id, notes: 'Membership fee collected at registration',
+                });
+            }
 
             return { member_id, user_id };
         });
@@ -83,6 +82,36 @@ const updateMember = async (req, res) => {
     }
 };
 
+// Assigns a plan to a member with none yet, or edits their current plan
+// in place (change of plan/price/dates) — either way the linked payment
+// is created/updated to match, so the ledger never drifts from the plan.
+const updateMembership = async (req, res) => {
+    const { id } = req.params;
+    const { membership_type_id, start_date } = req.body;
+
+    try {
+        const [[member]] = await pool.query('SELECT member_id FROM members WHERE member_id = ?', [id]);
+        if (!member) {
+            return res.status(404).json({ message: 'Member not found.' });
+        }
+
+        const result = await withTransaction(async (connection) => {
+            const { membershipId, price } = await assignOrUpdateMembership(connection, { member_id: id, membership_type_id, start_date });
+            return syncMembershipPayment(connection, {
+                member_id: id, membershipId, amount: price, payment_date: start_date,
+                handledBy: req.user.user_id, notes: 'Membership plan updated by admin',
+            });
+        });
+
+        res.json({ message: 'Membership plan updated.', ...result });
+    } catch (err) {
+        if (err.statusCode) {
+            return res.status(err.statusCode).json({ message: err.message });
+        }
+        res.status(500).json({ message: 'Failed to update membership.', error: err.message });
+    }
+};
+
 const deleteMember = async (req, res) => {
     const { id } = req.params;
 
@@ -102,4 +131,4 @@ const deleteMember = async (req, res) => {
     }
 };
 
-module.exports = { getMembers, createMember, updateMember, deleteMember };
+module.exports = { getMembers, createMember, updateMember, updateMembership, deleteMember };

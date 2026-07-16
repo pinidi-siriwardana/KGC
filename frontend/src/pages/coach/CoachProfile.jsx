@@ -125,7 +125,7 @@ const CoachProfile = () => {
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Contact Number</label>
                             <input
-                                type="text" required disabled={loading}
+                                type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" required disabled={loading}
                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-amber-500/10 disabled:opacity-50"
                                 value={profileForm.phone}
                                 onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
