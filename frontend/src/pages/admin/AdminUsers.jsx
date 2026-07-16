@@ -301,14 +301,14 @@ const AdminUsers = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-[9px] font-black uppercase text-slate-400 ml-1">System Role</label>
-                                <select disabled={editingSelf} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                                <select disabled={!!editingUser} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                     value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
                                     <option value="member">Member</option>
                                     <option value="coach">Coach</option>
                                     <option value="admin">Administrator</option>
                                 </select>
                             </div>
-                            {formData.role === 'admin' ? (
+                            {formData.role === 'admin' || editingUser ? (
                                 <div className="space-y-1">
                                     <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Account Status</label>
                                     <select disabled={editingSelf} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
@@ -317,19 +317,25 @@ const AdminUsers = () => {
                                         <option value="pending">Pending</option>
                                         <option value="disabled">Disabled</option>
                                     </select>
+                                    {editingUser && formData.role !== 'admin' && (
+                                        <p className="text-[9px] text-slate-400">Disabling here also suspends their {formData.role} profile, and blocks login.</p>
+                                    )}
                                 </div>
                             ) : (
-                                !editingUser && (
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Login Status</label>
-                                        <p className="text-[11px] text-slate-500 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl">Active on creation</p>
-                                    </div>
-                                )
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Login Status</label>
+                                    <p className="text-[11px] text-slate-500 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl">Active on creation</p>
+                                </div>
                             )}
                         </div>
                         {editingSelf && (
                             <p className="text-slate-400 text-[10px] leading-relaxed">
-                                You can&apos;t change your own role or status — ask another administrator to do it.
+                                You can&apos;t change your own status — ask another administrator to do it.
+                            </p>
+                        )}
+                        {editingUser && !editingSelf && (
+                            <p className="text-slate-400 text-[10px] leading-relaxed">
+                                Role is fixed once an account is created — delete and recreate it to change roles.
                             </p>
                         )}
 

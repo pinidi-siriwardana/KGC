@@ -4,6 +4,7 @@ const { hashPassword } = require('../utils/password');
 const { createMemberAccount } = require('../utils/memberAccount');
 const { createCoachAccount } = require('../utils/coachAccount');
 const { assignOrUpdateMembership, syncMembershipPayment } = require('../utils/membership');
+const { toProfileStatus } = require('../utils/accountStatus');
 
 const SAFE_FIELDS = 'user_id, username, role, status, created_at';
 
@@ -178,34 +179,63 @@ const updateUser = async (req, res) => {
     }
 
     try {
-        const demotingOrDisabling = (role !== undefined && role !== 'admin') || (status !== undefined && status !== 'active');
+        const [[target]] = await pool.query('SELECT role FROM users WHERE user_id = ?', [id]);
+        if (!target) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        // A member/coach role is half of a two-table record (users +
+        // members/coaches) — there's no safe automatic way to migrate their
+        // existing profile, plan, and booking/payment history to a
+        // different role's table, so the role is fixed at creation instead
+        // of silently producing an orphaned profile row.
+        if (role !== undefined && role !== target.role) {
+            return res.status(400).json({ message: 'Role cannot be changed after an account is created. Delete and recreate the account instead.' });
+        }
+
+        const demotingOrDisabling = status !== undefined && status !== 'active';
         if (demotingOrDisabling && (await isLastActiveAdmin(id))) {
             return res.status(400).json({ message: 'Cannot remove the last active administrator.' });
         }
 
-        const fields = [];
-        const values = [];
+        await withTransaction(async (connection) => {
+            const fields = [];
+            const values = [];
 
-        if (username !== undefined) { fields.push('username = ?'); values.push(username); }
-        if (role !== undefined) { fields.push('role = ?'); values.push(role); }
-        if (status !== undefined) { fields.push('status = ?'); values.push(status); }
-        if (password) { fields.push('password_hash = ?'); values.push(await hashPassword(password)); }
+            if (username !== undefined) { fields.push('username = ?'); values.push(username); }
+            if (status !== undefined) { fields.push('status = ?'); values.push(status); }
+            if (password) { fields.push('password_hash = ?'); values.push(await hashPassword(password)); }
 
-        if (fields.length === 0) {
-            return res.status(400).json({ message: 'No fields to update.' });
-        }
+            if (fields.length === 0) {
+                const err = new Error('No fields to update.');
+                err.statusCode = 400;
+                throw err;
+            }
 
-        const [result] = await pool.query(
-            `UPDATE users SET ${fields.join(', ')} WHERE user_id = ?`,
-            [...values, id]
-        );
+            const [result] = await connection.query(
+                `UPDATE users SET ${fields.join(', ')} WHERE user_id = ?`,
+                [...values, id]
+            );
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
+            if (result.affectedRows === 0) {
+                const err = new Error('User not found.');
+                err.statusCode = 404;
+                throw err;
+            }
+
+            // Keep the Member/Coach Directory's own status column in step —
+            // that's the field admins actually look at there.
+            if (status !== undefined && (target.role === 'member' || target.role === 'coach')) {
+                const table = target.role === 'member' ? 'members' : 'coaches';
+                await connection.query(`UPDATE ${table} SET status = ? WHERE user_id = ?`, [toProfileStatus(status), id]);
+            }
+        });
 
         res.json({ message: 'User updated.' });
     } catch (err) {
+        if (err.statusCode) {
+            return res.status(err.statusCode).json({ message: err.message });
+        }
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ message: 'Username is already taken.' });
         }

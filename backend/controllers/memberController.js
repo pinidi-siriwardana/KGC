@@ -6,6 +6,7 @@ const {
     CURRENT_MEMBERSHIP_SELECT, CURRENT_MEMBERSHIP_JOIN,
     assignOrUpdateMembership, syncMembershipPayment,
 } = require('../utils/membership');
+const { toLoginStatus } = require('../utils/accountStatus');
 
 const getMembers = async (req, res) => {
     try {
@@ -64,17 +65,30 @@ const updateMember = async (req, res) => {
     const { full_name, email, phone, status } = req.body;
 
     try {
-        const [result] = await pool.query(
-            'UPDATE members SET full_name = ?, email = ?, phone = ?, status = ? WHERE member_id = ?',
-            [full_name, email, phone, status, id]
-        );
+        await withTransaction(async (connection) => {
+            const [[member]] = await connection.query('SELECT user_id FROM members WHERE member_id = ?', [id]);
+            if (!member) {
+                const err = new Error('Member not found.');
+                err.statusCode = 404;
+                throw err;
+            }
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Member not found.' });
-        }
+            await connection.query(
+                'UPDATE members SET full_name = ?, email = ?, phone = ?, status = ? WHERE member_id = ?',
+                [full_name, email, phone, status, id]
+            );
+
+            // A suspended/inactive member shouldn't still be able to log in
+            // — this is what actually gates access, members.status alone is
+            // just a directory label.
+            await connection.query('UPDATE users SET status = ? WHERE user_id = ?', [toLoginStatus(status), member.user_id]);
+        });
 
         res.json({ message: 'Member updated.' });
     } catch (err) {
+        if (err.statusCode) {
+            return res.status(err.statusCode).json({ message: err.message });
+        }
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ message: 'Email is already in use.' });
         }

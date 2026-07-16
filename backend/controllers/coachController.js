@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { withTransaction } = pool;
 const { hashPassword } = require('../utils/password');
 const { createCoachAccount } = require('../utils/coachAccount');
+const { toLoginStatus } = require('../utils/accountStatus');
 
 const getCoaches = async (req, res) => {
     try {
@@ -38,18 +39,31 @@ const updateCoach = async (req, res) => {
     const { full_name, email, phone, specialization, experience_years, status } = req.body;
 
     try {
-        const [result] = await pool.query(
-            `UPDATE coaches SET full_name = ?, email = ?, phone = ?, specialization = ?, experience_years = ?, status = ?
-             WHERE coach_id = ?`,
-            [full_name, email, phone, specialization, experience_years, status, id]
-        );
+        await withTransaction(async (connection) => {
+            const [[coach]] = await connection.query('SELECT user_id FROM coaches WHERE coach_id = ?', [id]);
+            if (!coach) {
+                const err = new Error('Coach not found.');
+                err.statusCode = 404;
+                throw err;
+            }
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Coach not found.' });
-        }
+            await connection.query(
+                `UPDATE coaches SET full_name = ?, email = ?, phone = ?, specialization = ?, experience_years = ?, status = ?
+                 WHERE coach_id = ?`,
+                [full_name, email, phone, specialization, experience_years, status, id]
+            );
+
+            // A suspended/inactive coach shouldn't still be able to log in
+            // — this is what actually gates access, coaches.status alone is
+            // just a directory label.
+            await connection.query('UPDATE users SET status = ? WHERE user_id = ?', [toLoginStatus(status), coach.user_id]);
+        });
 
         res.json({ message: 'Coach updated.' });
     } catch (err) {
+        if (err.statusCode) {
+            return res.status(err.statusCode).json({ message: err.message });
+        }
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ message: 'Email is already in use.' });
         }
