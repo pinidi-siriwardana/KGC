@@ -14,4 +14,14 @@ const updateProfileSchema = z.object({
     .refine((obj) => Object.keys(obj).length > 0, { message: 'Nothing to update.' })
     .refine((obj) => !obj.newPassword || obj.currentPassword, { message: 'Current password is required to set a new password.' });
 
-module.exports = { updateProfileSchema };
+// Admins have no linked profile table (unlike members/coaches) — username +
+// password on `users` is the entire account, so there's no email/phone here.
+const updateAdminProfileSchema = z.object({
+    username: username.optional(),
+    currentPassword: z.string().optional(),
+    newPassword: password.optional(),
+})
+    .refine((obj) => Object.keys(obj).length > 0, { message: 'Nothing to update.' })
+    .refine((obj) => !obj.newPassword || obj.currentPassword, { message: 'Current password is required to set a new password.' });
+
+module.exports = { updateProfileSchema, updateAdminProfileSchema };

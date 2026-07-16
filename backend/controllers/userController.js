@@ -227,7 +227,7 @@ const updateUser = async (req, res) => {
             // that's the field admins actually look at there.
             if (status !== undefined && (target.role === 'member' || target.role === 'coach')) {
                 const table = target.role === 'member' ? 'members' : 'coaches';
-                await connection.query(`UPDATE ${table} SET status = ? WHERE user_id = ?`, [toProfileStatus(status), id]);
+                await connection.query(`UPDATE ${table} SET status = ? WHERE user_id = ?`, [toProfileStatus(status, target.role), id]);
             }
         });
 

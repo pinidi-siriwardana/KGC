@@ -318,7 +318,9 @@ const AdminUsers = () => {
                                         <option value="disabled">Disabled</option>
                                     </select>
                                     {editingUser && formData.role !== 'admin' && (
-                                        <p className="text-[9px] text-slate-400">Disabling here also suspends their {formData.role} profile, and blocks login.</p>
+                                        <p className="text-[9px] text-slate-400">
+                                            Disabling here also marks their {formData.role} profile as {formData.role === 'coach' ? '"on-leave"' : '"suspended"'}, and blocks login.
+                                        </p>
                                     )}
                                 </div>
                             ) : (

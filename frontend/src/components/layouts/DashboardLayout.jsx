@@ -44,6 +44,11 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
           { name: 'Revenue Reports', icon: BarChart3, path: '/admin/reports' },
         ]
       },
+      {
+        group: "Account", items: [
+          { name: 'Profile Settings', icon: UserCog, path: '/admin/profile' },
+        ]
+      },
 
     ],
     member: [
