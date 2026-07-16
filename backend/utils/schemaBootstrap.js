@@ -74,11 +74,22 @@ const backfillAdminStaffRecords = async () => {
     `);
 };
 
+// coaches.photo_url: lets an admin attach a profile photo, shown on the
+// public home page's coach section instead of the old hardcoded images.
+const ensureCoachesSchema = async () => {
+    try {
+        await pool.query('ALTER TABLE coaches ADD COLUMN photo_url VARCHAR(255) DEFAULT NULL');
+    } catch (err) {
+        ignoreIfAlreadyApplied(err);
+    }
+};
+
 const ensureSchema = async () => {
     await ensureGuestsSchema();
     await ensurePaymentsSchema();
     await ensureStaffSchema();
     await backfillAdminStaffRecords();
+    await ensureCoachesSchema();
 };
 
 module.exports = { ensureSchema };

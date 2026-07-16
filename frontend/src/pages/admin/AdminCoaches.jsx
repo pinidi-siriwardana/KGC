@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserCheck, Mail, Award, Phone, Settings, Trash2, Plus, X } from 'lucide-react';
+import { UserCheck, Mail, Award, Phone, Settings, Trash2, Plus, X, Camera, Loader2 } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, API_URL } from '../../utils/api';
 
 const STATUS_OPTIONS = [
     { value: '', label: 'All Statuses' },
@@ -34,6 +34,8 @@ const AdminCoaches = () => {
         email: '', phone: '', specialization: '',
         experience_years: 0, status: 'active'
     });
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [photoError, setPhotoError] = useState('');
 
     useEffect(() => { fetchCoaches(); }, []);
 
@@ -44,6 +46,7 @@ const AdminCoaches = () => {
     };
 
     const handleOpenModal = (coach = null) => {
+        setPhotoError('');
         if (coach) {
             setEditingCoach(coach);
             setFormData(coach); // Pre-fill for edit
@@ -52,6 +55,31 @@ const AdminCoaches = () => {
             setFormData({ username: '', password: '', full_name: '', email: '', phone: '', specialization: '', experience_years: 0, status: 'active' });
         }
         setIsModalOpen(true);
+    };
+
+    // Uploads immediately on file select — separate from the rest of the
+    // form's JSON PUT, since this is a multipart request tied to an already-
+    // existing coach_id (so it's only available once editing, not on create).
+    const handlePhotoUpload = async (file) => {
+        if (!editingCoach || !file) return;
+        setUploadingPhoto(true);
+        setPhotoError('');
+
+        const body = new FormData();
+        body.append('photo', file);
+
+        const res = await apiFetch(`/api/coaches/${editingCoach.coach_id}/photo`, { method: 'POST', body });
+        setUploadingPhoto(false);
+
+        if (res.ok) {
+            const data = await res.json();
+            setFormData((f) => ({ ...f, photo_url: data.photo_url }));
+            setEditingCoach((c) => ({ ...c, photo_url: data.photo_url }));
+            fetchCoaches();
+        } else {
+            const err = await res.json();
+            setPhotoError(err.message || 'Failed to upload photo.');
+        }
     };
 
     const handleDelete = async (id) => {
@@ -121,7 +149,12 @@ const AdminCoaches = () => {
                                 <tr key={coach.coach_id} className="hover:bg-slate-50/80 transition-colors group">
                                     <td className="p-4">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200"><UserCheck size={18} /></div>
+                                            {coach.photo_url ? (
+                                                <img src={`${API_URL}${coach.photo_url}`} alt={coach.full_name}
+                                                    className="w-10 h-10 rounded-xl object-cover border border-slate-200" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200"><UserCheck size={18} /></div>
+                                            )}
                                             <div>
                                                 <p className="text-slate-900 text-sm font-bold">{coach.full_name}</p>
                                                 <p className="text-[10px] text-slate-400 font-medium">{coach.email}</p>
@@ -161,6 +194,31 @@ const AdminCoaches = () => {
                     onSubmit={handleSubmit}
                 >
                     {/* Form Fields as Children */}
+                    {editingCoach && (
+                        <div className="flex items-center gap-4">
+                            {formData.photo_url ? (
+                                <img src={`${API_URL}${formData.photo_url}`} alt={formData.full_name}
+                                    className="w-16 h-16 rounded-2xl object-cover border border-slate-200" />
+                            ) : (
+                                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
+                                    <UserCheck size={24} />
+                                </div>
+                            )}
+                            <div className="space-y-1">
+                                <label className={`flex items-center gap-2 text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                                    uploadingPhoto ? 'bg-slate-100 text-slate-400' : 'bg-slate-900 text-white hover:bg-slate-800'
+                                }`}>
+                                    {uploadingPhoto ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                                    {uploadingPhoto ? 'Uploading...' : formData.photo_url ? 'Change Photo' : 'Upload Photo'}
+                                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingPhoto}
+                                        onChange={(e) => handlePhotoUpload(e.target.files[0])} />
+                                </label>
+                                {photoError && <p className="text-[10px] text-red-500 font-bold">{photoError}</p>}
+                                <p className="text-[9px] text-slate-400">Shown on the public home page. JPG, PNG or WEBP, max 3MB.</p>
+                            </div>
+                        </div>
+                    )}
+
                     {!editingCoach && (
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">

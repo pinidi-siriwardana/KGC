@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const pool = require('../config/db');
 const { withTransaction } = pool;
 const { hashPassword } = require('../utils/password');
@@ -7,8 +9,24 @@ const { toLoginStatus } = require('../utils/accountStatus');
 const getCoaches = async (req, res) => {
     try {
         const [rows] = await pool.query(
-            `SELECT coach_id, user_id, full_name, email, phone, specialization, experience_years, status, created_at
+            `SELECT coach_id, user_id, full_name, email, phone, specialization, experience_years, status, photo_url, created_at
              FROM coaches ORDER BY created_at DESC`
+        );
+        res.json({ data: rows });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to fetch coaches.', error: err.message });
+    }
+};
+
+// Public: the home page's coach section reads this directly instead of
+// hardcoded profiles, so it grows/shrinks with whatever admins actually
+// maintain in the Coach Directory. Only active coaches, and only the fields
+// meant to be shown to visitors — no email/phone/user_id.
+const getPublicCoaches = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT coach_id, full_name, specialization, experience_years, photo_url
+             FROM coaches WHERE status = 'active' ORDER BY created_at ASC`
         );
         res.json({ data: rows });
     } catch (err) {
@@ -71,6 +89,42 @@ const updateCoach = async (req, res) => {
     }
 };
 
+// Admin: replaces a coach's photo. The old file (if any) is deleted from
+// disk once the new one is saved, so switching photos repeatedly doesn't
+// leave orphaned files behind in uploads/coaches.
+const updateCoachPhoto = async (req, res) => {
+    const { id } = req.params;
+
+    const cleanupUpload = () => {
+        if (req.file) fs.unlink(req.file.path, () => {});
+    };
+
+    if (!req.file) {
+        return res.status(400).json({ message: 'A photo file is required.' });
+    }
+
+    try {
+        const [[coach]] = await pool.query('SELECT photo_url FROM coaches WHERE coach_id = ?', [id]);
+        if (!coach) {
+            cleanupUpload();
+            return res.status(404).json({ message: 'Coach not found.' });
+        }
+
+        const photo_url = `/uploads/coaches/${req.file.filename}`;
+        await pool.query('UPDATE coaches SET photo_url = ? WHERE coach_id = ?', [photo_url, id]);
+
+        if (coach.photo_url) {
+            const oldPath = path.join(__dirname, '..', coach.photo_url);
+            fs.unlink(oldPath, () => {});
+        }
+
+        res.json({ message: 'Coach photo updated.', photo_url });
+    } catch (err) {
+        cleanupUpload();
+        res.status(500).json({ message: 'Failed to update coach photo.', error: err.message });
+    }
+};
+
 const deleteCoach = async (req, res) => {
     const { id } = req.params;
 
@@ -90,4 +144,4 @@ const deleteCoach = async (req, res) => {
     }
 };
 
-module.exports = { getCoaches, createCoach, updateCoach, deleteCoach };
+module.exports = { getCoaches, getPublicCoaches, createCoach, updateCoach, updateCoachPhoto, deleteCoach };
