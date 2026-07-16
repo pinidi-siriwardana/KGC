@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Award, CalendarCheck } from 'lucide-react';
 
 const initials = (name) => (name || '')
@@ -9,14 +9,20 @@ const initials = (name) => (name || '')
   .join('');
 
 const CoachCard = ({ coach }) => {
+  // A photo can be deleted from disk after the page's data loads — onError
+  // catches that 404 and falls back to the same initials placeholder used
+  // when there's no photo at all, instead of a broken-image icon.
+  const [imageBroken, setImageBroken] = useState(false);
+
   return (
     <div className="group relative">
       {/* Main Container with 3rem Radius */}
       <div className="relative h-[500px] rounded-club overflow-hidden shadow-2xl transition-all duration-700 group-hover:-translate-y-3 bg-obsidian">
-        {coach.image ? (
+        {coach.image && !imageBroken ? (
           <img
             src={coach.image}
             alt={coach.name}
+            onError={() => setImageBroken(true)}
             className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110 brightness-[0.85] saturate-[0.8]"
           />
         ) : (

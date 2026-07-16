@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Wallet, Trophy, UserCheck, Receipt, Ban, Heart, FileUp, CheckCircle2, ExternalLink, UserX } from 'lucide-react';
-import { apiFetch, API_URL } from '../../utils/api';
+import { apiFetch } from '../../utils/api';
+import { openUploadedFile } from '../../utils/openUploadedFile';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
@@ -57,6 +58,7 @@ const CoachPayments = () => {
     const [payingFee, setPayingFee] = useState(null);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [fileError, setFileError] = useState('');
 
     const filteredPayments = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -233,6 +235,12 @@ const CoachPayments = () => {
 
             <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
                 <h3 className="text-slate-800 text-lg font-serif italic mb-6">My Submissions</h3>
+                {fileError && (
+                    <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-100 text-red-600 text-xs font-bold px-4 py-3 rounded-xl">
+                        <span>{fileError}</span>
+                        <button onClick={() => setFileError('')} className="text-red-400 hover:text-red-600 shrink-0">✕</button>
+                    </div>
+                )}
                 {!loading && requests.length === 0 && (
                     <p className="text-slate-400 text-[10px] uppercase tracking-widest font-black py-6 text-center">No payment submissions yet.</p>
                 )}
@@ -251,10 +259,11 @@ const CoachPayments = () => {
                                     <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full border ${STATUS_STYLE[r.status] || STATUS_STYLE.pending}`}>
                                         {r.status}
                                     </span>
-                                    <a href={`${API_URL}${r.receipt_file_url}`} target="_blank" rel="noreferrer"
+                                    <button
+                                        onClick={() => openUploadedFile(r.receipt_file_url, () => setFileError('This receipt could not be found. It may have been moved or deleted.'))}
                                         className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors" title="View receipt">
                                         <ExternalLink size={14} />
-                                    </a>
+                                    </button>
                                 </div>
                             </div>
                         ))}

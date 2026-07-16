@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Check, X, Eye, AlertCircle, Pencil, RotateCcw, ExternalLink } from 'lucide-react';
+import { Check, X, Eye, AlertCircle, Pencil, RotateCcw, ExternalLink, ImageOff } from 'lucide-react';
 import { apiFetch, API_URL } from '../../utils/api';
+import { openUploadedFile } from '../../utils/openUploadedFile';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
+
+const FILE_NOT_FOUND_MESSAGE = 'This receipt file could not be found. It may have been moved or deleted from the server.';
 
 const STATUS_OPTIONS = [
     { value: '', label: 'All Statuses' },
@@ -19,6 +22,8 @@ const ReceiptReview = () => {
     const [editForm, setEditForm] = useState({ remarks: '', amount_declared: '' });
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [brokenSlips, setBrokenSlips] = useState({});
+    const [fileError, setFileError] = useState('');
 
     const filteredHistory = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -117,19 +122,49 @@ const ReceiptReview = () => {
                 </div>
             </header>
 
+            {fileError && (
+                <div className="mb-6 flex items-center justify-between gap-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold px-4 py-3 rounded-xl">
+                    <span>{fileError}</span>
+                    <button onClick={() => setFileError('')} className="text-rose-400/70 hover:text-rose-300 shrink-0"><X size={14} /></button>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {slips.map((slip) => (
                     <div key={slip.verification_id} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl">
                         {/* Image Section */}
                         <div
                             className="md:w-1/3 h-48 md:h-auto bg-slate-800 relative group cursor-pointer"
-                            onClick={() => window.open(`${API_URL}${slip.receipt_file_url}`, '_blank')}
-                            title="Open full-size slip"
+                            onClick={() => {
+                                if (brokenSlips[slip.verification_id]) {
+                                    setFileError(FILE_NOT_FOUND_MESSAGE);
+                                    return;
+                                }
+                                openUploadedFile(slip.receipt_file_url, () => {
+                                    setBrokenSlips((b) => ({ ...b, [slip.verification_id]: true }));
+                                    setFileError(FILE_NOT_FOUND_MESSAGE);
+                                });
+                            }}
+                            title={brokenSlips[slip.verification_id] ? 'File not found' : 'Open full-size slip'}
                         >
-                            <img src={`${API_URL}${slip.receipt_file_url}`} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" alt="receipt"/>
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Eye className="text-white" size={24}/>
-                            </div>
+                            {brokenSlips[slip.verification_id] ? (
+                                <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-500">
+                                    <ImageOff size={28} />
+                                    <span className="text-[9px] font-black uppercase tracking-widest">File Not Found</span>
+                                </div>
+                            ) : (
+                                <>
+                                    <img
+                                        src={`${API_URL}${slip.receipt_file_url}`}
+                                        className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
+                                        alt="receipt"
+                                        onError={() => setBrokenSlips((b) => ({ ...b, [slip.verification_id]: true }))}
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Eye className="text-white" size={24}/>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         {/* Content Section */}
@@ -232,7 +267,7 @@ const ReceiptReview = () => {
                                     <td className="p-4 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                             <button
-                                                onClick={() => window.open(`${API_URL}${entry.receipt_file_url}`, '_blank')}
+                                                onClick={() => openUploadedFile(entry.receipt_file_url, () => setFileError(FILE_NOT_FOUND_MESSAGE))}
                                                 title="View slip"
                                                 className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                                             >

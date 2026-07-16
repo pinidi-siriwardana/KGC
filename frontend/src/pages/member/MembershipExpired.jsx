@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Clock, ExternalLink } from 'lucide-react';
-import { apiFetch, API_URL } from '../../utils/api';
+import { apiFetch } from '../../utils/api';
+import { openUploadedFile } from '../../utils/openUploadedFile';
 import BankDetails from '../../components/common/BankDetails';
 import ReceiptUploadField from '../../components/common/ReceiptUploadField';
 
@@ -18,6 +19,7 @@ const MembershipExpired = ({ membership }) => {
     const [receiptFile, setReceiptFile] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [fileError, setFileError] = useState('');
 
     const fetchPendingRequest = () =>
         apiFetch('/api/member/payments')
@@ -127,15 +129,14 @@ const MembershipExpired = ({ membership }) => {
                                 member portal automatically once an admin approves your payment.
                             </p>
                             {pendingRequest.receipt_file_url && (
-                                <a
-                                    href={`${API_URL}${pendingRequest.receipt_file_url}`}
-                                    target="_blank"
-                                    rel="noreferrer"
+                                <button
+                                    onClick={() => openUploadedFile(pendingRequest.receipt_file_url, () => setFileError('Your submitted slip could not be found. It may have been moved or deleted.'))}
                                     className="inline-flex items-center gap-1.5 text-amber-700 text-[10px] font-black uppercase tracking-widest hover:text-amber-900 transition-colors"
                                 >
                                     <ExternalLink size={12} /> View submitted slip
-                                </a>
+                                </button>
                             )}
+                            {fileError && <p className="text-red-600 text-[10px] font-bold mt-2">{fileError}</p>}
                         </div>
                     </div>
                 )}

@@ -36,6 +36,8 @@ const AdminCoaches = () => {
     });
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [photoError, setPhotoError] = useState('');
+    const [brokenPhotos, setBrokenPhotos] = useState({});
+    const [previewBroken, setPreviewBroken] = useState(false);
 
     useEffect(() => { fetchCoaches(); }, []);
 
@@ -47,6 +49,7 @@ const AdminCoaches = () => {
 
     const handleOpenModal = (coach = null) => {
         setPhotoError('');
+        setPreviewBroken(false);
         if (coach) {
             setEditingCoach(coach);
             setFormData(coach); // Pre-fill for edit
@@ -75,6 +78,7 @@ const AdminCoaches = () => {
             const data = await res.json();
             setFormData((f) => ({ ...f, photo_url: data.photo_url }));
             setEditingCoach((c) => ({ ...c, photo_url: data.photo_url }));
+            setPreviewBroken(false);
             fetchCoaches();
         } else {
             const err = await res.json();
@@ -149,8 +153,9 @@ const AdminCoaches = () => {
                                 <tr key={coach.coach_id} className="hover:bg-slate-50/80 transition-colors group">
                                     <td className="p-4">
                                         <div className="flex items-center gap-4">
-                                            {coach.photo_url ? (
+                                            {coach.photo_url && !brokenPhotos[coach.coach_id] ? (
                                                 <img src={`${API_URL}${coach.photo_url}`} alt={coach.full_name}
+                                                    onError={() => setBrokenPhotos((b) => ({ ...b, [coach.coach_id]: true }))}
                                                     className="w-10 h-10 rounded-xl object-cover border border-slate-200" />
                                             ) : (
                                                 <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200"><UserCheck size={18} /></div>
@@ -196,8 +201,9 @@ const AdminCoaches = () => {
                     {/* Form Fields as Children */}
                     {editingCoach && (
                         <div className="flex items-center gap-4">
-                            {formData.photo_url ? (
+                            {formData.photo_url && !previewBroken ? (
                                 <img src={`${API_URL}${formData.photo_url}`} alt={formData.full_name}
+                                    onError={() => setPreviewBroken(true)}
                                     className="w-16 h-16 rounded-2xl object-cover border border-slate-200" />
                             ) : (
                                 <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
@@ -214,6 +220,9 @@ const AdminCoaches = () => {
                                         onChange={(e) => handlePhotoUpload(e.target.files[0])} />
                                 </label>
                                 {photoError && <p className="text-[10px] text-red-500 font-bold">{photoError}</p>}
+                                {previewBroken && !photoError && (
+                                    <p className="text-[10px] text-red-500 font-bold">This coach's photo file could not be found on the server — please upload a new one.</p>
+                                )}
                                 <p className="text-[9px] text-slate-400">Shown on the public home page. JPG, PNG or WEBP, max 3MB.</p>
                             </div>
                         </div>
