@@ -1,15 +1,7 @@
 const { z } = require('zod');
-const { username, password, email, phone, dateString } = require('./common');
+const { username, password, email, phone, dateString, optionalMembershipTypeId } = require('./common');
 
 const statusEnum = z.enum(['active', 'inactive', 'suspended']);
-
-// membership_type_id is optional here: admins can register a member with no
-// plan yet and assign one (with a matching payment) later. The form posts ''
-// when left unselected, so that's normalized to undefined before coercion.
-const optionalMembershipTypeId = z.preprocess(
-    (val) => (val === '' || val === null || val === undefined ? undefined : val),
-    z.coerce.number().int().positive('membership_type_id must be a valid plan').optional()
-);
 
 const createMemberSchema = z.object({
     username,

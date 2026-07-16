@@ -27,4 +27,16 @@ const positiveAmount = z.coerce.number().positive('amount must be a positive num
 
 const nonNegativeAmount = z.coerce.number().nonnegative('amount must be a non-negative number');
 
-module.exports = { idParam, dateString, email, phone, password, username, positiveAmount, nonNegativeAmount, PHONE_FORMAT_HINT };
+// Shared by any "create a member" form (Add Member, Access Management, the
+// manual-payment new-member purpose): a plan is optional up front, and the
+// form posts '' when left unselected, so that's normalized to undefined
+// before coercion rather than failing positive().
+const optionalMembershipTypeId = z.preprocess(
+    (val) => (val === '' || val === null || val === undefined ? undefined : val),
+    z.coerce.number().int().positive('membership_type_id must be a valid plan').optional()
+);
+
+module.exports = {
+    idParam, dateString, email, phone, password, username, positiveAmount, nonNegativeAmount,
+    PHONE_FORMAT_HINT, optionalMembershipTypeId,
+};

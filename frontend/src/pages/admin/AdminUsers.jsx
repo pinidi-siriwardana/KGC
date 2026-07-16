@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserCheck, Shield, UserCog, Trash2, Plus } from 'lucide-react';
+import { UserCheck, Shield, UserCog, Trash2, Plus, AlertTriangle, Wrench } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
@@ -19,14 +19,33 @@ const STATUS_OPTIONS = [
     { value: 'disabled', label: 'Disabled' },
 ];
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const emptyFormData = () => ({
+    username: '', password: '', role: 'member', status: 'active',
+    full_name: '', email: '', phone: '',
+    membership_type_id: '', start_date: todayISO(),
+    specialization: '', experience_years: 0,
+});
+
+const emptyProfileForm = () => ({
+    full_name: '', email: '', phone: '',
+    membership_type_id: '', start_date: todayISO(),
+    specialization: '', experience_years: 0,
+});
+
 const AdminUsers = () => {
     const [users, setUsers] = useState([]);
+    const [membershipTypes, setMembershipTypes] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({ username: '', password: '', role: 'member', status: 'active' });
+    const [formData, setFormData] = useState(emptyFormData);
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+
+    const [completingUser, setCompletingUser] = useState(null);
+    const [profileForm, setProfileForm] = useState(emptyProfileForm);
 
     const currentUserId = (() => {
         try {
@@ -47,7 +66,10 @@ const AdminUsers = () => {
         });
     }, [users, search, roleFilter, statusFilter]);
 
-    useEffect(() => { fetchUsers(); }, []);
+    useEffect(() => {
+        fetchUsers();
+        apiFetch('/api/membership-types').then((res) => res.json()).then((data) => setMembershipTypes(data.data || []));
+    }, []);
 
     const fetchUsers = async () => {
         try {
@@ -69,10 +91,10 @@ const AdminUsers = () => {
     const handleOpenModal = (user = null) => {
         if (user) {
             setEditingUser(user);
-            setFormData({ ...user, password: '' }); // Don't pre-fill password for security
+            setFormData({ ...emptyFormData(), ...user, password: '' }); // Don't pre-fill password for security
         } else {
             setEditingUser(null);
-            setFormData({ username: '', password: '', role: 'member', status: 'active' });
+            setFormData(emptyFormData());
         }
         setIsModalOpen(true);
     };
@@ -82,10 +104,17 @@ const AdminUsers = () => {
         const url = editingUser ? `/api/users/update/${editingUser.user_id}` : '/api/users/add';
         const method = editingUser ? 'PUT' : 'POST';
 
+        // Editing only ever touches username/role/status/password — the
+        // linked member/coach profile (if any) is managed from its own
+        // directory, not from here.
+        const body = editingUser
+            ? { username: formData.username, role: formData.role, status: formData.status, password: formData.password }
+            : formData;
+
         try {
             const res = await apiFetch(url, {
                 method,
-                body: JSON.stringify(formData)
+                body: JSON.stringify(body)
             });
 
             if (res.ok) {
@@ -119,6 +148,32 @@ const AdminUsers = () => {
             }
         } catch (err) {
             console.error('Delete error:', err);
+            alert('Check your internet or server connection.');
+        }
+    };
+
+    const handleOpenCompleteProfile = (user) => {
+        setCompletingUser(user);
+        setProfileForm(emptyProfileForm());
+    };
+
+    const handleCompleteProfile = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await apiFetch(`/api/users/${completingUser.user_id}/complete-profile`, {
+                method: 'POST',
+                body: JSON.stringify(profileForm),
+            });
+
+            if (res.ok) {
+                setCompletingUser(null);
+                fetchUsers();
+            } else {
+                const err = await res.json();
+                alert(err.message || 'Failed to link profile.');
+            }
+        } catch (err) {
+            console.error('Complete profile error:', err);
             alert('Check your internet or server connection.');
         }
     };
@@ -158,12 +213,19 @@ const AdminUsers = () => {
                                             <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
                                                 {u.role === 'admin' ? <Shield size={16} /> : <UserCog size={16} />}
                                             </div>
-                                            <p className="text-slate-900 text-sm font-bold">
-                                                {u.username}
-                                                {u.user_id === currentUserId && (
-                                                    <span className="ml-2 text-[8px] font-black uppercase text-emerald-600 align-middle">You</span>
+                                            <div>
+                                                <p className="text-slate-900 text-sm font-bold">
+                                                    {u.username}
+                                                    {u.user_id === currentUserId && (
+                                                        <span className="ml-2 text-[8px] font-black uppercase text-emerald-600 align-middle">You</span>
+                                                    )}
+                                                </p>
+                                                {u.has_profile === false && (
+                                                    <p className="flex items-center gap-1 text-[9px] font-black uppercase text-amber-600 mt-0.5">
+                                                        <AlertTriangle size={10} /> Missing {u.role} profile — hidden from directory
+                                                    </p>
                                                 )}
-                                            </p>
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="p-4">
@@ -186,6 +248,12 @@ const AdminUsers = () => {
                                     </td>
                                     <td className="p-4 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            {u.has_profile === false && (
+                                                <button onClick={() => handleOpenCompleteProfile(u)} title="Complete Profile"
+                                                    className="p-2 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
+                                                    <Wrench size={16} />
+                                                </button>
+                                            )}
                                             <button onClick={() => handleOpenModal(u)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><UserCheck size={16} /></button>
                                             {u.user_id !== currentUserId && (
                                                 <button
@@ -240,20 +308,165 @@ const AdminUsers = () => {
                                     <option value="admin">Administrator</option>
                                 </select>
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Account Status</label>
-                                <select disabled={editingSelf} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
-                                    <option value="active">Active</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="disabled">Disabled</option>
-                                </select>
-                            </div>
+                            {formData.role === 'admin' ? (
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Account Status</label>
+                                    <select disabled={editingSelf} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                                        value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
+                                        <option value="active">Active</option>
+                                        <option value="pending">Pending</option>
+                                        <option value="disabled">Disabled</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                !editingUser && (
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Login Status</label>
+                                        <p className="text-[11px] text-slate-500 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl">Active on creation</p>
+                                    </div>
+                                )
+                            )}
                         </div>
                         {editingSelf && (
                             <p className="text-slate-400 text-[10px] leading-relaxed">
                                 You can&apos;t change your own role or status — ask another administrator to do it.
                             </p>
+                        )}
+
+                        {!editingUser && (formData.role === 'member' || formData.role === 'coach') && (
+                            <>
+                                <div className="border-t border-slate-100 pt-4 space-y-1">
+                                    <p className="text-[9px] font-black uppercase text-slate-400 ml-1">
+                                        {formData.role === 'member' ? 'Member Directory' : 'Coach Directory'} Profile
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 ml-1">Required so this account shows up in its directory.</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Full Name</label>
+                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} required />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Email</label>
+                                        <input type="email" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                            value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Phone</label>
+                                        <input type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                            value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required />
+                                    </div>
+                                </div>
+
+                                {formData.role === 'member' && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Membership Plan</label>
+                                            <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                                value={formData.membership_type_id} onChange={(e) => setFormData({ ...formData, membership_type_id: e.target.value })}>
+                                                <option value="">No plan yet — pay later</option>
+                                                {membershipTypes.map((t) => (
+                                                    <option key={t.membership_type_id} value={t.membership_type_id}>
+                                                        {t.name} — LKR {t.price} / {t.duration_months}mo
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Start Date</label>
+                                            <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                                value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                                                disabled={!formData.membership_type_id} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {formData.role === 'coach' && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Specialization</label>
+                                            <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                                value={formData.specialization} onChange={(e) => setFormData({ ...formData, specialization: e.target.value })} />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Experience (Years)</label>
+                                            <input type="number" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                                value={formData.experience_years} onChange={(e) => setFormData({ ...formData, experience_years: parseInt(e.target.value) || 0 })} />
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </Modal>
+
+                {/* Complete Profile Modal — repairs an existing role-only account */}
+                <Modal
+                    isOpen={!!completingUser} onClose={() => setCompletingUser(null)}
+                    title={`Complete ${completingUser?.username || ''}'s Profile`}
+                    onSubmit={handleCompleteProfile}
+                    submitText="Link Profile"
+                >
+                    <div className="space-y-4">
+                        <p className="text-[10px] text-slate-400">
+                            This login has role <span className="font-black uppercase">{completingUser?.role}</span> but no matching
+                            entry in the {completingUser?.role === 'member' ? 'Member' : 'Coach'} Directory yet. Fill this in to fix that.
+                        </p>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Full Name</label>
+                            <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                value={profileForm.full_name} onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })} required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Email</label>
+                                <input type="email" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} required />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Phone</label>
+                                <input type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                    value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} required />
+                            </div>
+                        </div>
+
+                        {completingUser?.role === 'member' && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Membership Plan</label>
+                                    <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        value={profileForm.membership_type_id} onChange={(e) => setProfileForm({ ...profileForm, membership_type_id: e.target.value })}>
+                                        <option value="">No plan yet — pay later</option>
+                                        {membershipTypes.map((t) => (
+                                            <option key={t.membership_type_id} value={t.membership_type_id}>
+                                                {t.name} — LKR {t.price} / {t.duration_months}mo
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Start Date</label>
+                                    <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        value={profileForm.start_date} onChange={(e) => setProfileForm({ ...profileForm, start_date: e.target.value })}
+                                        disabled={!profileForm.membership_type_id} />
+                                </div>
+                            </div>
+                        )}
+
+                        {completingUser?.role === 'coach' && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Specialization</label>
+                                    <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        value={profileForm.specialization} onChange={(e) => setProfileForm({ ...profileForm, specialization: e.target.value })} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Experience (Years)</label>
+                                    <input type="number" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        value={profileForm.experience_years} onChange={(e) => setProfileForm({ ...profileForm, experience_years: parseInt(e.target.value) || 0 })} />
+                                </div>
+                            </div>
                         )}
                     </div>
                 </Modal>
