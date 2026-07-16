@@ -341,11 +341,11 @@ const AdminUsers = () => {
                             </p>
                         )}
 
-                        {!editingUser && (formData.role === 'member' || formData.role === 'coach') && (
+                        {!editingUser && (
                             <>
                                 <div className="border-t border-slate-100 pt-4 space-y-1">
                                     <p className="text-[9px] font-black uppercase text-slate-400 ml-1">
-                                        {formData.role === 'member' ? 'Member Directory' : 'Coach Directory'} Profile
+                                        {formData.role === 'member' ? 'Member Directory' : formData.role === 'coach' ? 'Coach Directory' : 'Staff Directory'} Profile
                                     </p>
                                     <p className="text-[10px] text-slate-400 ml-1">Required so this account shows up in its directory.</p>
                                 </div>
@@ -419,7 +419,7 @@ const AdminUsers = () => {
                     <div className="space-y-4">
                         <p className="text-[10px] text-slate-400">
                             This login has role <span className="font-black uppercase">{completingUser?.role}</span> but no matching
-                            entry in the {completingUser?.role === 'member' ? 'Member' : 'Coach'} Directory yet. Fill this in to fix that.
+                            entry in the {completingUser?.role === 'member' ? 'Member' : completingUser?.role === 'coach' ? 'Coach' : 'Staff'} Directory yet. Fill this in to fix that.
                         </p>
                         <div className="space-y-1">
                             <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Full Name</label>

@@ -33,6 +33,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
           { name: 'Member Directory', icon: Users, path: '/admin/members' },
           { name: 'Coach Profiles', icon: UserCheck, path: '/admin/coaches' },
           { name: 'Guest Directory', icon: UserPlus, path: '/admin/guests' },
+          { name: 'Staff Directory', icon: ShieldCheck, path: '/admin/staff' },
           { name: 'Access Management', icon: UserCog, path: '/admin/users' },
         ]
       },

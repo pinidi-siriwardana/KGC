@@ -14,14 +14,10 @@ const updateProfileSchema = z.object({
     .refine((obj) => Object.keys(obj).length > 0, { message: 'Nothing to update.' })
     .refine((obj) => !obj.newPassword || obj.currentPassword, { message: 'Current password is required to set a new password.' });
 
-// Admins have no linked profile table (unlike members/coaches) — username +
-// password on `users` is the entire account, so there's no email/phone here.
-const updateAdminProfileSchema = z.object({
-    username: username.optional(),
-    currentPassword: z.string().optional(),
-    newPassword: password.optional(),
-})
-    .refine((obj) => Object.keys(obj).length > 0, { message: 'Nothing to update.' })
-    .refine((obj) => !obj.newPassword || obj.currentPassword, { message: 'Current password is required to set a new password.' });
+// Admins now have a linked profile row too (the `staff` table, same as
+// members/coaches have `members`/`coaches`), so the shape is identical to
+// updateProfileSchema — kept as its own export so the admin route doesn't
+// depend on member/coach naming.
+const updateAdminProfileSchema = updateProfileSchema;
 
 module.exports = { updateProfileSchema, updateAdminProfileSchema };

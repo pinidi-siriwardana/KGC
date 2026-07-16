@@ -1,15 +1,19 @@
 const pool = require('../config/db');
 const { updateSelfProfile } = require('../utils/selfProfile');
 
-// Self-service profile for the logged-in admin. Admins have no linked
-// members/coaches-style profile row — username/password on `users` is the
-// whole account, so this only ever touches that one table.
+const ADMIN_SELECT = `
+    SELECT u.user_id, u.username, u.role, u.status, u.created_at, s.full_name, s.email, s.phone
+    FROM users u
+    LEFT JOIN staff s ON s.user_id = u.user_id
+    WHERE u.user_id = ?
+`;
+
+// Self-service profile for the logged-in admin: username/password on
+// `users`, plus full_name/email/phone on their linked `staff` row — same
+// two-table shape members/coaches already have.
 const getMe = async (req, res) => {
     try {
-        const [[admin]] = await pool.query(
-            'SELECT user_id, username, role, status, created_at FROM users WHERE user_id = ?',
-            [req.user.user_id]
-        );
+        const [[admin]] = await pool.query(ADMIN_SELECT, [req.user.user_id]);
 
         if (!admin) {
             return res.status(404).json({ message: 'Admin account not found.' });
@@ -22,20 +26,17 @@ const getMe = async (req, res) => {
 };
 
 const updateMe = async (req, res) => {
-    const { username, currentPassword, newPassword } = req.body;
+    const { username, email, phone, currentPassword, newPassword } = req.body;
 
     try {
-        await updateSelfProfile({ userId: req.user.user_id, username, currentPassword, newPassword });
+        await updateSelfProfile({ userId: req.user.user_id, table: 'staff', username, email, phone, currentPassword, newPassword });
 
-        const [[admin]] = await pool.query(
-            'SELECT user_id, username, role, status, created_at FROM users WHERE user_id = ?',
-            [req.user.user_id]
-        );
+        const [[admin]] = await pool.query(ADMIN_SELECT, [req.user.user_id]);
 
         res.json({ message: 'Profile updated.', admin });
     } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'Username is already taken.' });
+            return res.status(409).json({ message: 'Username or email is already in use.' });
         }
         if (err.statusCode) {
             return res.status(err.statusCode).json({ message: err.message });

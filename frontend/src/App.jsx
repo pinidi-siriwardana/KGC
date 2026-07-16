@@ -17,6 +17,7 @@ import AdminUsers from './pages/admin/AdminUsers';
 import AdminMembers from './pages/admin/AdminMembers';
 import AdminCoaches from './pages/admin/AdminCoaches';
 import AdminGuests from './pages/admin/AdminGuests';
+import AdminStaff from './pages/admin/AdminStaff';
 import AdminReciepts from './pages/admin/AdminReciepts';
 import AdminCourts from './pages/admin/AdminCourts';
 import AdminPayments from './pages/admin/AdminPayments';
@@ -85,6 +86,7 @@ const MainContent = () => {
               <Route path="/admin/members" element={<AdminMembers />} />
               <Route path="/admin/coaches" element={<AdminCoaches />} />
               <Route path="/admin/guests" element={<AdminGuests />} />
+              <Route path="/admin/staff" element={<AdminStaff />} />
               <Route path="/admin/verify-payments" element={<AdminReciepts />} />
               <Route path="/admin/payments" element={<AdminPayments />} />
               <Route path="/admin/membership-types" element={<AdminMembershipTypes />} />

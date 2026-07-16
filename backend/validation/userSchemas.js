@@ -4,15 +4,18 @@ const { username, password, email, phone, dateString, optionalMembershipTypeId }
 const roleEnum = z.enum(['admin', 'member', 'coach']);
 const statusEnum = z.enum(['active', 'pending', 'disabled']);
 
-// A member/coach login is only half the account — without full_name/email/
-// phone there's nothing to show in the Member/Coach Directory, so creating
-// one here requires the same profile fields the dedicated Add Member/Add
-// Coach forms collect. Admin accounts have no linked profile table at all.
+// A member/coach/admin login is only half the account — without
+// full_name/email/phone there's nothing to show in its directory (Member/
+// Coach Directory, or the Staff Directory for admins), so creating one here
+// requires the same profile fields the dedicated Add Member/Add Coach forms
+// collect.
 const createUserSchema = z.discriminatedUnion('role', [
     z.object({
         role: z.literal('admin'),
         username, password,
         status: statusEnum.optional(),
+        full_name: z.string().trim().min(1, 'full_name is required'),
+        email, phone,
     }),
     z.object({
         role: z.literal('member'),

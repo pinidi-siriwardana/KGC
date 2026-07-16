@@ -7,7 +7,7 @@ const emptyPasswordForm = { currentPassword: '', newPassword: '', confirmPasswor
 const AdminProfile = () => {
     const [admin, setAdmin] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [profileForm, setProfileForm] = useState({ username: '' });
+    const [profileForm, setProfileForm] = useState({ username: '', email: '', phone: '' });
     const [savingProfile, setSavingProfile] = useState(false);
     const [profileMessage, setProfileMessage] = useState(null);
 
@@ -24,7 +24,11 @@ const AdminProfile = () => {
             .then((res) => res.json())
             .then((data) => {
                 setAdmin(data.admin || null);
-                setProfileForm({ username: data.admin?.username || storedUser?.username || '' });
+                setProfileForm({
+                    username: data.admin?.username || storedUser?.username || '',
+                    email: data.admin?.email || '',
+                    phone: data.admin?.phone || '',
+                });
             })
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,9 +113,24 @@ const AdminProfile = () => {
                                 onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
                             />
                         </div>
-                        <p className="text-[10px] text-slate-400">
-                            Administrator accounts only have a username and password — there's no separate directory profile.
-                        </p>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Email</label>
+                            <input
+                                type="email" disabled={loading}
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-purple-500/10 disabled:opacity-50"
+                                value={profileForm.email}
+                                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Contact Number</label>
+                            <input
+                                type="tel" placeholder="07XXXXXXXX or +947XXXXXXXX" disabled={loading}
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-purple-500/10 disabled:opacity-50"
+                                value={profileForm.phone}
+                                onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                            />
+                        </div>
 
                         {profileMessage && (
                             <p className={`text-[11px] font-bold ${profileMessage.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>

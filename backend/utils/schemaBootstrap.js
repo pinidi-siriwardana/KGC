@@ -35,9 +35,50 @@ const ensurePaymentsSchema = async () => {
     }
 };
 
+// staff: HR-style directory for personnel who aren't members/coaches —
+// admins (linked to their login via user_id), plus guards/other staff who
+// have no system login at all (user_id stays NULL for those). Brand new
+// table, so a plain CREATE TABLE IF NOT EXISTS is enough — no ALTER needed.
+const ensureStaffSchema = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS staff (
+            staff_id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NULL,
+            full_name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) NULL,
+            phone VARCHAR(20) NULL,
+            staff_type ENUM('admin', 'guard', 'other') NOT NULL DEFAULT 'other',
+            position VARCHAR(100) NULL,
+            status ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
+            is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_staff_user (user_id),
+            CONSTRAINT fk_staff_user FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+        )
+    `);
+};
+
+// Admins created before the Staff Directory existed have no `staff` row —
+// without this, their own Profile Settings' email/phone update would
+// silently no-op (UPDATE ... WHERE user_id = ? affects zero rows) since
+// there'd be nothing to update. Backfilling a baseline row (username as a
+// placeholder name, contact fields left blank) means every admin can
+// immediately edit their contact info, same as members/coaches always could.
+const backfillAdminStaffRecords = async () => {
+    await pool.query(`
+        INSERT INTO staff (user_id, full_name, staff_type, status)
+        SELECT u.user_id, u.username, 'admin', 'active'
+        FROM users u
+        LEFT JOIN staff s ON s.user_id = u.user_id
+        WHERE u.role = 'admin' AND s.staff_id IS NULL
+    `);
+};
+
 const ensureSchema = async () => {
     await ensureGuestsSchema();
     await ensurePaymentsSchema();
+    await ensureStaffSchema();
+    await backfillAdminStaffRecords();
 };
 
 module.exports = { ensureSchema };

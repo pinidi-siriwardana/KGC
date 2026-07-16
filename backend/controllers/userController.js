@@ -3,19 +3,22 @@ const { withTransaction } = pool;
 const { hashPassword } = require('../utils/password');
 const { createMemberAccount } = require('../utils/memberAccount');
 const { createCoachAccount } = require('../utils/coachAccount');
+const { createStaffRecord } = require('../utils/staffAccount');
 const { assignOrUpdateMembership, syncMembershipPayment } = require('../utils/membership');
 const { toProfileStatus } = require('../utils/accountStatus');
 
 const SAFE_FIELDS = 'user_id, username, role, status, created_at';
 
-// A role of 'member'/'coach' on `users` means nothing on its own without a
-// matching row in `members`/`coaches` — that's what the Member/Coach
-// Directories actually query. Flagging the mismatch here lets Access
-// Management surface it instead of silently producing an invisible account.
+// A role of 'member'/'coach'/'admin' on `users` means nothing on its own
+// without a matching row in `members`/`coaches`/`staff` — that's what the
+// Member/Coach/Staff Directories actually query. Flagging the mismatch here
+// lets Access Management surface it instead of silently producing an
+// invisible account.
 const PROFILE_STATUS_SELECT = `
     CASE
         WHEN u.role = 'member' THEN (m.member_id IS NOT NULL)
         WHEN u.role = 'coach' THEN (c.coach_id IS NOT NULL)
+        WHEN u.role = 'admin' THEN (s.staff_id IS NOT NULL)
         ELSE NULL
     END AS has_profile
 `;
@@ -40,6 +43,7 @@ const getUsers = async (req, res) => {
              FROM users u
              LEFT JOIN members m ON m.user_id = u.user_id
              LEFT JOIN coaches c ON c.user_id = u.user_id
+             LEFT JOIN staff s ON s.user_id = u.user_id
              ORDER BY u.created_at DESC`
         );
         const data = rows.map((r) => ({ ...r, has_profile: r.has_profile === null ? null : Boolean(r.has_profile) }));
@@ -49,29 +53,29 @@ const getUsers = async (req, res) => {
     }
 };
 
-// An admin account is just a login — but member/coach roles are half of a
-// two-table record, so creating one here goes through the same
-// createMemberAccount/createCoachAccount helpers the dedicated Add Member/
-// Add Coach forms use, keeping every login visible in its directory.
+// Every role here is half of a two-table record — member/coach/admin logins
+// all pair a `users` row with a profile row (`members`/`coaches`/`staff`) in
+// the same transaction, keeping every login visible in its directory.
 const createUser = async (req, res) => {
     // `status` here is the login's users.status (active/pending/disabled) —
-    // a different enum than members.status/coaches.status, so it must NOT
-    // be forwarded into the profile helpers below; they default their own
-    // status to 'active' when it's left out.
+    // a different enum than members.status/coaches.status/staff.status, so
+    // it must NOT be forwarded into the profile helpers below; they default
+    // their own status to 'active' when it's left out.
     const { role, username, password, status, membership_type_id, start_date, ...profile } = req.body;
 
     try {
-        if (role === 'admin') {
-            const password_hash = await hashPassword(password);
-            const [result] = await pool.query(
-                'INSERT INTO users (username, password_hash, role, status) VALUES (?, ?, ?, ?)',
-                [username, password_hash, role, status || 'active']
-            );
-            return res.status(201).json({ message: 'User created.', user_id: result.insertId });
-        }
-
         const password_hash = await hashPassword(password);
         const result = await withTransaction(async (connection) => {
+            if (role === 'admin') {
+                const [userResult] = await connection.query(
+                    'INSERT INTO users (username, password_hash, role, status) VALUES (?, ?, ?, ?)',
+                    [username, password_hash, role, status || 'active']
+                );
+                const user_id = userResult.insertId;
+                const { staff_id } = await createStaffRecord(connection, { user_id, ...profile, staff_type: 'admin' });
+                return { user_id, staff_id };
+            }
+
             if (role === 'member') {
                 const { user_id, member_id } = await createMemberAccount(connection, { username, password_hash, ...profile });
 
@@ -101,9 +105,9 @@ const createUser = async (req, res) => {
     }
 };
 
-// Backfills the members/coaches row for an account that was created without
-// one (the historical role-only create path) — same effect as if the
-// profile fields had been supplied at creation time.
+// Backfills the members/coaches/staff row for an account that was created
+// without one (the historical role-only create path) — same effect as if
+// the profile fields had been supplied at creation time.
 const completeProfile = async (req, res) => {
     const { id } = req.params;
     const { membership_type_id, start_date, ...profile } = req.body;
@@ -113,12 +117,9 @@ const completeProfile = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
-        if (user.role !== 'member' && user.role !== 'coach') {
-            return res.status(400).json({ message: 'Only member/coach accounts have a linked profile.' });
-        }
 
-        const table = user.role === 'member' ? 'members' : 'coaches';
-        const idColumn = user.role === 'member' ? 'member_id' : 'coach_id';
+        const table = { member: 'members', coach: 'coaches', admin: 'staff' }[user.role];
+        const idColumn = { member: 'member_id', coach: 'coach_id', admin: 'staff_id' }[user.role];
         const [[existing]] = await pool.query(`SELECT ${idColumn} FROM ${table} WHERE user_id = ?`, [id]);
         if (existing) {
             return res.status(409).json({ message: 'This account already has a linked profile.' });
@@ -141,6 +142,13 @@ const completeProfile = async (req, res) => {
                 }
 
                 return { member_id };
+            }
+
+            if (user.role === 'admin') {
+                const { staff_id } = await createStaffRecord(connection, {
+                    user_id: id, full_name: profile.full_name, email: profile.email, phone: profile.phone, staff_type: 'admin',
+                });
+                return { staff_id };
             }
 
             const [coachResult] = await connection.query(
@@ -223,11 +231,13 @@ const updateUser = async (req, res) => {
                 throw err;
             }
 
-            // Keep the Member/Coach Directory's own status column in step —
-            // that's the field admins actually look at there.
-            if (status !== undefined && (target.role === 'member' || target.role === 'coach')) {
-                const table = target.role === 'member' ? 'members' : 'coaches';
-                await connection.query(`UPDATE ${table} SET status = ? WHERE user_id = ?`, [toProfileStatus(status, target.role), id]);
+            // Keep the Member/Coach/Staff Directory's own status column in
+            // step — that's the field admins actually look at there.
+            if (status !== undefined) {
+                const table = { member: 'members', coach: 'coaches', admin: 'staff' }[target.role];
+                if (table) {
+                    await connection.query(`UPDATE ${table} SET status = ? WHERE user_id = ?`, [toProfileStatus(status, target.role), id]);
+                }
             }
         });
 
