@@ -1,6 +1,7 @@
 const fs = require('fs');
 const pool = require('../config/db');
 const { withTransaction } = pool;
+const { normalizeIfPhone } = require('../validation/common');
 
 const badRequest = (m) => { const e = new Error(m); e.statusCode = 400; throw e; };
 const forbidden = (m) => { const e = new Error(m); e.statusCode = 403; throw e; };
@@ -53,9 +54,27 @@ const getAvailability = async (req, res) => {
     }
 };
 
+// Public: lets the guest-booking widget check whether a phone/email already
+// belongs to a guest, so a returning guest can reuse that record instead of
+// a fresh (duplicate) one being created on every single booking.
+const lookupGuest = async (req, res) => {
+    const { contact } = req.query;
+    const normalized = normalizeIfPhone(contact);
+
+    try {
+        const [[guest]] = await pool.query(
+            'SELECT guest_id, full_name, phone, email FROM guests WHERE is_deleted = 0 AND (phone = ? OR email = ?) LIMIT 1',
+            [normalized, normalized]
+        );
+        res.json({ data: guest || null });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to look up guest.', error: err.message });
+    }
+};
+
 // Public: clicking an open slot holds it for 5 minutes while the guest pays.
 const createGuestLock = async (req, res) => {
-    const { court_id, slot_id, booking_date, guest_full_name, guest_phone, guest_email } = req.body;
+    const { court_id, slot_id, booking_date, guest_id: existingGuestId, guest_full_name, guest_phone, guest_email } = req.body;
 
     try {
         const data = await withTransaction(async (connection) => {
@@ -66,11 +85,18 @@ const createGuestLock = async (req, res) => {
             const [[slot]] = await connection.query('SELECT slot_id FROM time_slots WHERE slot_id = ?', [slot_id]);
             if (!slot) notFound('Time slot not found.');
 
-            const [insertGuest] = await connection.query(
-                'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
-                [guest_full_name, guest_phone, guest_email || null]
-            );
-            const guest_id = insertGuest.insertId;
+            let guest_id;
+            if (existingGuestId) {
+                const [[guest]] = await connection.query('SELECT guest_id FROM guests WHERE guest_id = ? AND is_deleted = 0', [existingGuestId]);
+                if (!guest) badRequest('Invalid guest_id.');
+                guest_id = guest.guest_id;
+            } else {
+                const [insertGuest] = await connection.query(
+                    'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
+                    [guest_full_name, guest_phone, guest_email || null]
+                );
+                guest_id = insertGuest.insertId;
+            }
 
             // Same locking-read + reuse pattern as createBooking, extended
             // with one more "still occupied" condition: a pending row only
@@ -389,5 +415,5 @@ const updateBookingStatus = async (req, res) => {
 
 module.exports = {
     getAvailability, getBookings, createBooking, updateBookingStatus,
-    createGuestLock, submitGuestPayment,
+    lookupGuest, createGuestLock, submitGuestPayment,
 };

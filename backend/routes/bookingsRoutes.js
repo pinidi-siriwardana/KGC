@@ -3,13 +3,13 @@ const router = express.Router();
 const { verifyToken, requireRole } = require('../middleware/auth');
 const {
     getAvailability, getBookings, createBooking, updateBookingStatus,
-    createGuestLock, submitGuestPayment,
+    lookupGuest, createGuestLock, submitGuestPayment,
 } = require('../controllers/bookingController');
 const { uploadReceipt } = require('../middleware/upload');
 const { validate } = require('../middleware/validate');
 const { idParam } = require('../validation/common');
 const {
-    availabilityQuerySchema, getBookingsQuerySchema, createGuestLockSchema,
+    availabilityQuerySchema, getBookingsQuerySchema, lookupGuestQuerySchema, createGuestLockSchema,
     createBookingSchema, updateBookingStatusSchema,
 } = require('../validation/bookingSchemas');
 
@@ -17,6 +17,7 @@ const {
 // member, coach, admin alike), and the guest-booking widget on /courts — no
 // account needed for either.
 router.get('/availability', validate(availabilityQuerySchema, 'query'), getAvailability);
+router.get('/guest-lookup', validate(lookupGuestQuerySchema, 'query'), lookupGuest);
 router.post('/guest-lock', validate(createGuestLockSchema), createGuestLock);
 // validate() runs AFTER upload — multer hasn't parsed req.body yet before that.
 router.post('/guest-lock/:id/pay', validate(idParam(), 'params'), uploadReceipt.single('receipt'), submitGuestPayment);

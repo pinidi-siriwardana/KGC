@@ -23,6 +23,18 @@ const password = z.string().min(6, 'password must be at least 6 characters');
 
 const username = z.string().trim().min(3, 'username must be at least 3 characters').max(50, 'username must be at most 50 characters');
 
+// Same normalization as `phone` above, but for lookups where the input could
+// be a phone OR an email — only reshapes the value when it actually matches
+// the phone pattern, leaves anything else (an email, a partial/invalid
+// phone) untouched for the caller to compare/validate as-is.
+const normalizeIfPhone = (raw) => {
+    const trimmed = raw.trim().replace(/[\s-]/g, '');
+    if (/^(?:0|\+94)7\d{8}$/.test(trimmed)) {
+        return trimmed.startsWith('+94') ? `0${trimmed.slice(3)}` : trimmed;
+    }
+    return raw.trim();
+};
+
 const positiveAmount = z.coerce.number().positive('amount must be a positive number');
 
 const nonNegativeAmount = z.coerce.number().nonnegative('amount must be a non-negative number');
@@ -38,5 +50,5 @@ const optionalMembershipTypeId = z.preprocess(
 
 module.exports = {
     idParam, dateString, email, phone, password, username, positiveAmount, nonNegativeAmount,
-    PHONE_FORMAT_HINT, optionalMembershipTypeId,
+    PHONE_FORMAT_HINT, optionalMembershipTypeId, normalizeIfPhone,
 };

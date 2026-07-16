@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CalendarDays, Info, FileUp, CheckCircle2, Clock } from 'lucide-react';
+import { CalendarDays, Info, FileUp, CheckCircle2, Clock, UserCheck2 } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
 import Modal from '../../components/common/Modal';
@@ -9,6 +9,8 @@ import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const emptyGuestForm = () => ({ guest_full_name: '', guest_phone: '', guest_email: '' });
+
+const looksLikeEmail = (value) => value.includes('@');
 
 const formatRemaining = (seconds) => {
     if (seconds <= 0) return '0:00';
@@ -25,7 +27,9 @@ const GuestBooking = () => {
     const [settings, setSettings] = useState(null);
 
     const [pendingSlot, setPendingSlot] = useState(null);
-    const [step, setStep] = useState('details'); // 'details' | 'payment' | 'done'
+    const [step, setStep] = useState('lookup'); // 'lookup' | 'details' | 'payment' | 'done'
+    const [lookupContact, setLookupContact] = useState('');
+    const [foundGuest, setFoundGuest] = useState(null);
     const [guestForm, setGuestForm] = useState(emptyGuestForm);
     const [lockedBooking, setLockedBooking] = useState(null);
     const [remaining, setRemaining] = useState(0);
@@ -72,8 +76,10 @@ const GuestBooking = () => {
     const handleSelectSlot = (court, slot) => {
         setError('');
         setGuestForm(emptyGuestForm());
+        setLookupContact('');
+        setFoundGuest(null);
         setPendingSlot({ court, slot });
-        setStep('details');
+        setStep('lookup');
         setLockedBooking(null);
     };
 
@@ -83,8 +89,7 @@ const GuestBooking = () => {
         refreshAvailability();
     };
 
-    const handleDetailsSubmit = async (e) => {
-        e.preventDefault();
+    const submitGuestLock = async (guestPayload) => {
         setSubmitting(true);
         setError('');
 
@@ -94,7 +99,7 @@ const GuestBooking = () => {
                 court_id: pendingSlot.court.court_id,
                 slot_id: pendingSlot.slot.slot_id,
                 booking_date: selectedDate,
-                ...guestForm,
+                ...guestPayload,
             }),
         });
 
@@ -109,6 +114,54 @@ const GuestBooking = () => {
             setError(err.message || 'Failed to hold this slot.');
             if (res.status === 409) refreshAvailability();
         }
+    };
+
+    // Prefills whichever field the typed contact looks like, so a guest who
+    // isn't found (or says "not me") doesn't have to retype it in the form.
+    const prefillFromLookup = () => ({
+        guest_full_name: '',
+        guest_phone: looksLikeEmail(lookupContact) ? '' : lookupContact,
+        guest_email: looksLikeEmail(lookupContact) ? lookupContact : '',
+    });
+
+    const handleLookupSubmit = async (e) => {
+        e.preventDefault();
+
+        // A match was already found and confirmed — this submit is "Yes,
+        // continue as this guest", reusing their existing record.
+        if (foundGuest) {
+            await submitGuestLock({ guest_id: foundGuest.guest_id });
+            return;
+        }
+
+        setSubmitting(true);
+        setError('');
+        const res = await apiFetch(`/api/bookings/guest-lookup?contact=${encodeURIComponent(lookupContact)}`);
+        setSubmitting(false);
+
+        if (!res.ok) {
+            setError('Something went wrong checking that — please try again.');
+            return;
+        }
+
+        const data = await res.json();
+        if (data.data) {
+            setFoundGuest(data.data);
+        } else {
+            setGuestForm(prefillFromLookup());
+            setStep('details');
+        }
+    };
+
+    const handleNotThisGuest = () => {
+        setGuestForm(prefillFromLookup());
+        setFoundGuest(null);
+        setStep('details');
+    };
+
+    const handleDetailsSubmit = async (e) => {
+        e.preventDefault();
+        await submitGuestLock(guestForm);
     };
 
     const handlePaymentSubmit = async (e) => {
@@ -147,7 +200,10 @@ const GuestBooking = () => {
         closeModal();
     };
 
-    const handleModalSubmit = step === 'details' ? handleDetailsSubmit : step === 'payment' ? handlePaymentSubmit : handleDoneSubmit;
+    const handleModalSubmit = step === 'lookup' ? handleLookupSubmit
+        : step === 'details' ? handleDetailsSubmit
+        : step === 'payment' ? handlePaymentSubmit
+        : handleDoneSubmit;
 
     return (
         <section id="book" className="relative bg-alabaster py-24 px-6 lg:px-20 overflow-hidden border-t border-obsidian/5">
@@ -200,8 +256,17 @@ const GuestBooking = () => {
 
             <Modal
                 isOpen={!!pendingSlot} onClose={closeModal}
-                title={step === 'details' ? 'Your Details' : step === 'payment' ? 'Complete Payment' : 'Submitted'}
-                submitText={submitting ? 'Please wait...' : step === 'details' ? 'Hold This Slot (5 min)' : step === 'payment' ? 'Submit Payment' : 'Close'}
+                title={
+                    step === 'lookup' ? (foundGuest ? 'Welcome Back' : 'Have You Booked Before?')
+                        : step === 'details' ? 'Your Details'
+                            : step === 'payment' ? 'Complete Payment' : 'Submitted'
+                }
+                submitText={
+                    submitting ? 'Please wait...'
+                        : step === 'lookup' ? (foundGuest ? `Yes, Continue as ${foundGuest.full_name}` : 'Check')
+                            : step === 'details' ? 'Hold This Slot (5 min)'
+                                : step === 'payment' ? 'Submit Payment' : 'Close'
+                }
                 onSubmit={handleModalSubmit}
             >
                 {pendingSlot && step !== 'done' && (
@@ -210,6 +275,38 @@ const GuestBooking = () => {
                         <span className="font-bold text-slate-900">{selectedDate}</span> at{' '}
                         <span className="font-bold text-slate-900">{pendingSlot.slot.start_time?.slice(0, 5)}–{pendingSlot.slot.end_time?.slice(0, 5)}</span>
                     </p>
+                )}
+
+                {step === 'lookup' && (
+                    <div className="space-y-3">
+                        {!foundGuest ? (
+                            <>
+                                <p className="text-slate-500 text-xs leading-relaxed">
+                                    Enter the phone number or email you used last time, so we don't create a duplicate guest record for you.
+                                </p>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400">Phone or Email</label>
+                                    <input type="text" required autoFocus placeholder="07XXXXXXXX or you@example.com"
+                                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                        value={lookupContact} onChange={(e) => setLookupContact(e.target.value)} />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                                    <UserCheck2 className="text-emerald-600 shrink-0" size={20} />
+                                    <p className="text-slate-700 text-sm">
+                                        Welcome back, <span className="font-bold text-slate-900">{foundGuest.full_name}</span>! Continue booking with these saved details?
+                                    </p>
+                                </div>
+                                <button type="button" onClick={handleNotThisGuest}
+                                    className="w-full text-center text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700 py-2">
+                                    Not you? Use different details
+                                </button>
+                            </div>
+                        )}
+                        {error && <p className="text-red-500 text-[11px] font-bold">{error}</p>}
+                    </div>
                 )}
 
                 {step === 'details' && (
