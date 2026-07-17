@@ -395,7 +395,7 @@ const updateBookingStatus = async (req, res) => {
     const { action } = req.body;
 
     try {
-        const cancellationFee = await withTransaction(async (connection) => {
+        const result = await withTransaction(async (connection) => {
             const [[booking]] = await connection.query('SELECT * FROM bookings WHERE booking_id = ? FOR UPDATE', [id]);
             if (!booking) notFound('Booking not found.');
 
@@ -406,6 +406,25 @@ const updateBookingStatus = async (req, res) => {
                         [action === 'lock' ? 'locked' : 'unlocked', id]
                     );
                     return null;
+                }
+                if (action === 'restore') {
+                    if (!['cancelled', 'rejected'].includes(booking.status)) {
+                        conflict(`This booking is ${booking.status}, not cancelled or rejected.`);
+                    }
+                    await connection.query("UPDATE bookings SET status = 'confirmed' WHERE booking_id = ?", [id]);
+
+                    // A self-cancellation fee only made sense while the
+                    // cancellation stood — restoring the booking means the
+                    // fee no longer applies. Only touches a fee still
+                    // 'recorded' (unpaid); one already settled/completed is
+                    // left alone for the admin to handle manually (a real
+                    // refund decision, not an automatic one).
+                    const [result] = await connection.query(
+                        `UPDATE payments SET status = 'waived', notes = TRIM(CONCAT(COALESCE(notes, ''), ' — waived: booking restored by admin'))
+                         WHERE booking_id = ? AND payment_type = 'cancellation_fee' AND status = 'recorded'`,
+                        [id]
+                    );
+                    return { feeWaived: result.affectedRows > 0 };
                 }
                 if (!['pending', 'confirmed'].includes(booking.status)) {
                     conflict(`This booking is already ${booking.status}.`);
@@ -448,10 +467,49 @@ const updateBookingStatus = async (req, res) => {
             return fee;
         });
 
-        res.json({
-            message: cancellationFee ? `Booking cancelled. A cancellation fee of LKR ${cancellationFee} has been charged to your account.` : 'Booking updated.',
-            cancellation_fee: cancellationFee || 0,
+        if (action === 'restore') {
+            res.json({
+                message: result?.feeWaived
+                    ? 'Booking restored. Its cancellation fee has been waived.'
+                    : 'Booking restored.',
+            });
+        } else {
+            const cancellationFee = typeof result === 'number' ? result : 0;
+            res.json({
+                message: cancellationFee ? `Booking cancelled. A cancellation fee of LKR ${cancellationFee} has been charged to your account.` : 'Booking updated.',
+                cancellation_fee: cancellationFee,
+            });
+        }
+    } catch (err) {
+        if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
+        res.status(500).json({ message: 'Failed to update booking.', error: err.message });
+    }
+};
+
+// Admin-only correction of a booking's recorded fee (e.g. a mistyped amount)
+// without cancelling and recreating the whole booking. Keeps the linked
+// payments ledger row (booking_fee, for a guest booking) in sync rather than
+// leaving the two out of step — same pattern editVerification already uses
+// for payment_verification <-> payments.
+const updateBookingDetails = async (req, res) => {
+    const { id } = req.params;
+    const { amount_charged, note } = req.body;
+
+    try {
+        await withTransaction(async (connection) => {
+            const [result] = await connection.query(
+                'UPDATE bookings SET amount_charged = ? WHERE booking_id = ?',
+                [amount_charged, id]
+            );
+            if (result.affectedRows === 0) notFound('Booking not found.');
+
+            await connection.query(
+                `UPDATE payments SET amount = ?${note !== undefined ? ', notes = ?' : ''} WHERE booking_id = ? AND payment_type = 'booking_fee'`,
+                note !== undefined ? [amount_charged, note || null, id] : [amount_charged, id]
+            );
         });
+
+        res.json({ message: 'Booking updated.' });
     } catch (err) {
         if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
         res.status(500).json({ message: 'Failed to update booking.', error: err.message });
@@ -459,6 +517,6 @@ const updateBookingStatus = async (req, res) => {
 };
 
 module.exports = {
-    getAvailability, getBookings, createBooking, updateBookingStatus,
+    getAvailability, getBookings, createBooking, updateBookingStatus, updateBookingDetails,
     lookupGuest, createGuestLock, submitGuestPayment,
 };

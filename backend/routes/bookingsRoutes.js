@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken, requireRole } = require('../middleware/auth');
 const {
-    getAvailability, getBookings, createBooking, updateBookingStatus,
+    getAvailability, getBookings, createBooking, updateBookingStatus, updateBookingDetails,
     lookupGuest, createGuestLock, submitGuestPayment,
 } = require('../controllers/bookingController');
 const { uploadReceipt } = require('../middleware/upload');
@@ -10,7 +10,7 @@ const { validate } = require('../middleware/validate');
 const { idParam } = require('../validation/common');
 const {
     availabilityQuerySchema, getBookingsQuerySchema, lookupGuestQuerySchema, createGuestLockSchema,
-    createBookingSchema, updateBookingStatusSchema,
+    createBookingSchema, updateBookingStatusSchema, updateBookingDetailsSchema,
 } = require('../validation/bookingSchemas');
 
 // Public: the single occupancy endpoint used by every booking grid (guest,
@@ -27,5 +27,6 @@ router.use(verifyToken, requireRole('admin', 'member', 'coach'));
 router.get('/', validate(getBookingsQuerySchema, 'query'), getBookings);
 router.post('/', validate(createBookingSchema), createBooking);
 router.patch('/:id', validate(idParam(), 'params'), validate(updateBookingStatusSchema), updateBookingStatus);
+router.patch('/:id/details', requireRole('admin'), validate(idParam(), 'params'), validate(updateBookingDetailsSchema), updateBookingDetails);
 
 module.exports = router;

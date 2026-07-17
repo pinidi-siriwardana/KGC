@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { dateString, phone } = require('./common');
+const { dateString, phone, nonNegativeAmount } = require('./common');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -54,9 +54,17 @@ const createBookingSchema = z.object({
 }).passthrough();
 
 const updateBookingStatusSchema = z.object({
-    action: z.enum(['cancel', 'reject', 'lock', 'unlock'], {
-        error: "action must be 'cancel', 'reject', 'lock' or 'unlock'.",
+    action: z.enum(['cancel', 'reject', 'lock', 'unlock', 'restore'], {
+        error: "action must be 'cancel', 'reject', 'lock', 'unlock' or 'restore'.",
     }),
+});
+
+// Admin-only correction of a booking's recorded fee (and, for guest bookings,
+// the note attached to its payment) after the fact — e.g. a mistyped amount —
+// without having to cancel and recreate the whole booking.
+const updateBookingDetailsSchema = z.object({
+    amount_charged: nonNegativeAmount,
+    note: z.string().trim().optional(),
 });
 
 module.exports = {
@@ -66,4 +74,5 @@ module.exports = {
     createGuestLockSchema,
     createBookingSchema,
     updateBookingStatusSchema,
+    updateBookingDetailsSchema,
 };

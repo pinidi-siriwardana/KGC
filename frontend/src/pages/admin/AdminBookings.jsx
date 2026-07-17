@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Filter, Lock, Unlock, XCircle, Ban, CheckCircle2, Pencil, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Filter, Lock, Unlock, XCircle, Ban, CheckCircle2, Pencil, AlertTriangle, RotateCcw } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
 import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
@@ -45,6 +45,11 @@ const AdminBookings = () => {
     const [editingFee, setEditingFee] = useState(false);
     const [feeInput, setFeeInput] = useState('');
     const [savingFee, setSavingFee] = useState(false);
+
+    const [editingBooking, setEditingBooking] = useState(null);
+    const [editAmount, setEditAmount] = useState('');
+    const [editError, setEditError] = useState('');
+    const [savingEdit, setSavingEdit] = useState(false);
 
     useEffect(() => {
         apiFetch('/api/courts').then((res) => res.json()).then((data) => setCourts(data.data || []));
@@ -179,11 +184,44 @@ const AdminBookings = () => {
             body: JSON.stringify({ action }),
         });
         if (res.ok) {
+            const data = await res.json();
+            if (action === 'restore' && data.message) {
+                setSuccess(data.message);
+                setTimeout(() => setSuccess(''), 4000);
+            }
             fetchBookings();
             refreshAvailability();
         } else {
             const err = await res.json();
             alert(err.message || 'Failed to update booking.');
+        }
+    };
+
+    const handleOpenEdit = (booking) => {
+        setEditError('');
+        setEditAmount(booking.amount_charged ?? '');
+        setEditingBooking(booking);
+    };
+
+    const handleSaveEdit = async (e) => {
+        e.preventDefault();
+        setSavingEdit(true);
+        setEditError('');
+
+        const res = await apiFetch(`/api/bookings/${editingBooking.booking_id}/details`, {
+            method: 'PATCH',
+            body: JSON.stringify({ amount_charged: editAmount }),
+        });
+        setSavingEdit(false);
+
+        if (res.ok) {
+            setEditingBooking(null);
+            setSuccess('Booking updated.');
+            setTimeout(() => setSuccess(''), 4000);
+            fetchBookings();
+        } else {
+            const err = await res.json();
+            setEditError(err.message || 'Failed to update booking.');
         }
     };
 
@@ -323,6 +361,10 @@ const AdminBookings = () => {
                                     </td>
                                     <td className="p-4 text-right">
                                         <div className="flex justify-end gap-1">
+                                            <button onClick={() => handleOpenEdit(b)} title="Edit amount charged"
+                                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg">
+                                                <Pencil size={14} />
+                                            </button>
                                             {['pending', 'confirmed'].includes(b.status) && (
                                                 <>
                                                     <button onClick={() => handleAction(b, 'cancel')} title="Cancel"
@@ -334,6 +376,12 @@ const AdminBookings = () => {
                                                         <XCircle size={14} />
                                                     </button>
                                                 </>
+                                            )}
+                                            {['cancelled', 'rejected'].includes(b.status) && (
+                                                <button onClick={() => handleAction(b, 'restore')} title="Undo — restore this booking"
+                                                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                                                    <RotateCcw size={14} />
+                                                </button>
                                             )}
                                             {b.lock_status === 'locked' ? (
                                                 <button onClick={() => handleAction(b, 'unlock')} title="Unlock"
@@ -490,6 +538,37 @@ const AdminBookings = () => {
                         )}
 
                         {createError && <p className="text-red-500 text-[11px] font-bold">{createError}</p>}
+                    </div>
+                )}
+            </Modal>
+
+            <Modal
+                isOpen={!!editingBooking} onClose={() => setEditingBooking(null)}
+                title="Edit Booking"
+                submitText={savingEdit ? 'Saving...' : 'Save Changes'}
+                onSubmit={handleSaveEdit}
+            >
+                {editingBooking && (
+                    <div className="space-y-4">
+                        <p className="text-slate-600 text-sm">
+                            <span className="font-bold text-slate-900">{editingBooking.payer_name || 'Unknown'}</span>
+                            {' · '}{editingBooking.court_name}{' · '}
+                            {editingBooking.start_time?.slice(0, 5)}–{editingBooking.end_time?.slice(0, 5)} on {editingBooking.booking_date}
+                        </p>
+
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400">Amount Charged (LKR)</label>
+                            <input
+                                type="number" step="0.01" min="0" autoFocus required
+                                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                                value={editAmount} onChange={(e) => setEditAmount(e.target.value)}
+                            />
+                            <p className="text-slate-400 text-[10px] pt-1">
+                                If this booking has a linked payment record, its amount is corrected to match.
+                            </p>
+                        </div>
+
+                        {editError && <p className="text-red-500 text-[11px] font-bold">{editError}</p>}
                     </div>
                 )}
             </Modal>
