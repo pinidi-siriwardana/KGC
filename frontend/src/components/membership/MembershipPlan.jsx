@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Crown, Users, Trophy, ArrowRight } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
+import { useClubSettings } from '../../hooks/useClubSettings';
 
 // The backend only stores name/duration/price for a membership_type — the
 // marketing copy below is presentational only. Keyed by plan name so real
@@ -38,6 +39,7 @@ const PRESENTATION_FALLBACK = {
 const formatLKR = (n) => `LKR ${Number(n || 0).toLocaleString('en-LK')}`;
 
 const MembershipPlans = () => {
+  const { settings } = useClubSettings();
   const [membershipTypes, setMembershipTypes] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -165,7 +167,7 @@ const MembershipPlans = () => {
         {/* Minimized Footer Detail */}
         <div className="mt-16 pt-8 border-t border-obsidian/5 flex justify-between items-center opacity-30 text-[9px] font-black uppercase tracking-registry text-obsidian">
            <p>Legacy Selection Process</p>
-           <p>stewardship@kgc.lk</p>
+           <p>{settings.club_email}</p>
         </div>
 
       </div>

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Mail, Phone, MapPin, Send, Clock, MessageSquare } from 'lucide-react';
 import { API_URL } from '../../utils/api';
+import { useClubSettings } from '../../hooks/useClubSettings';
 
 const ContactSection = () => {
+    const { settings } = useClubSettings();
     const [formData, setFormData] = useState({ full_name: '', email: '', phone: '', message: '' });
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
@@ -65,7 +67,7 @@ const ContactSection = () => {
                                 </div>
                                 <div>
                                     <h4 className="text-[10px] uppercase tracking-registry text-amber/50 font-black mb-1">Our Grounds</h4>
-                                    <p className="text-white/90 text-lg font-medium leading-relaxed">Peradeniya Road,<br />Kandy, Sri Lanka</p>
+                                    <p className="text-white/90 text-lg font-medium leading-relaxed">{settings.club_address}</p>
                                 </div>
                             </div>
 
@@ -75,7 +77,7 @@ const ContactSection = () => {
                                 </div>
                                 <div>
                                     <h4 className="text-[10px] uppercase tracking-registry text-amber/50 font-black mb-1">Phone</h4>
-                                    <p className="text-white/90 text-lg font-medium">+94 (81) 222-3333</p>
+                                    <p className="text-white/90 text-lg font-medium">{settings.club_phone}</p>
                                 </div>
                             </div>
 
@@ -85,7 +87,7 @@ const ContactSection = () => {
                                 </div>
                                 <div>
                                     <h4 className="text-[10px] uppercase tracking-registry text-amber/50 font-black mb-1">Email</h4>
-                                    <p className="text-white/90 text-lg font-medium">hello@kandygardenclub.lk</p>
+                                    <p className="text-white/90 text-lg font-medium">{settings.club_email}</p>
                                 </div>
                             </div>
                         </div>
@@ -94,7 +96,7 @@ const ContactSection = () => {
                             <Clock size={20} className="text-amber/40" />
                             <div>
                                 <p className="text-[9px] uppercase tracking-registry font-black text-amber/40">Admin Hours</p>
-                                <p className="text-sm font-bold text-white uppercase tracking-widest">Mon – Sun: 08:00 – 20:00</p>
+                                <p className="text-sm font-bold text-white uppercase tracking-widest">{settings.club_opening_hours}</p>
                             </div>
                         </div>
                     </div>

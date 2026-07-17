@@ -13,6 +13,7 @@ import DashboardLayout from './components/layouts/DashboardLayout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminHome from './pages/admin/AdminHome';
 import AdminProfile from './pages/admin/AdminProfile';
+import AdminClubSettings from './pages/admin/AdminClubSettings';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminMembers from './pages/admin/AdminMembers';
 import AdminCoaches from './pages/admin/AdminCoaches';
@@ -83,6 +84,7 @@ const MainContent = () => {
             <Route element={<DashboardLayout role="admin" />}>
               <Route path="/admin/dashboard" element={<AdminHome />} />
               <Route path="/admin/profile" element={<AdminProfile />} />
+              <Route path="/admin/settings" element={<AdminClubSettings />} />
               <Route path="/admin/users" element={<AdminUsers />} />
               <Route path="/admin/members" element={<AdminMembers />} />
               <Route path="/admin/coaches" element={<AdminCoaches />} />

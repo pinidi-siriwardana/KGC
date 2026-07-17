@@ -1,19 +1,23 @@
 import React from 'react';
 import { ArrowUpRight, Trophy, Star, ChevronUp, MapPin, Mail, Globe } from 'lucide-react';
 import { FaFacebookF, FaInstagram, FaXTwitter } from 'react-icons/fa6';
+import { useClubSettings } from '../../hooks/useClubSettings';
 
 const Footer = () => {
+  const { settings } = useClubSettings();
   const currentYear = new Date().getFullYear();
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Only shown once an admin sets a real URL from Club Settings — no more
+  // dead '#' links.
   const socialLinks = [
-    { Icon: FaFacebookF, href: '#' },
-    { Icon: FaInstagram, href: '#' },
-    { Icon: FaXTwitter, href: '#' },
-  ];
+    { Icon: FaFacebookF, href: settings.club_facebook_url },
+    { Icon: FaInstagram, href: settings.club_instagram_url },
+    { Icon: FaXTwitter, href: settings.club_twitter_url },
+  ].filter((s) => s.href);
 
   return (
     <footer className="w-full bg-obsidian border-t border-white/5 relative overflow-hidden">
@@ -72,11 +76,11 @@ const Footer = () => {
               <div className="space-y-4">
                 <div className="group cursor-default">
                   <p className="text-[10px] text-white/30 uppercase font-black mb-1">Mail</p>
-                  <p className="text-xs font-light text-white/60 group-hover:text-emerald transition-colors">concierge@kgc.lk</p>
+                  <p className="text-xs font-light text-white/60 group-hover:text-emerald transition-colors">{settings.club_email}</p>
                 </div>
                 <div className="group cursor-default">
                   <p className="text-[10px] text-white/30 uppercase font-black mb-1">Location</p>
-                  <p className="text-xs font-light text-white/60 group-hover:text-emerald transition-colors">Peradeniya Rd, Kandy</p>
+                  <p className="text-xs font-light text-white/60 group-hover:text-emerald transition-colors">{settings.club_address}</p>
                 </div>
               </div>
             </div>
@@ -86,9 +90,11 @@ const Footer = () => {
           <div className="lg:col-span-3 flex flex-col items-start lg:items-end justify-between gap-12 self-stretch">
             <div className="flex gap-4">
               {socialLinks.map((social, i) => (
-                <a 
-                  key={i} 
-                  href={social.href} 
+                <a
+                  key={i}
+                  href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-12 h-12 border border-white/5 bg-white/[0.02] flex items-center justify-center text-white/40 hover:text-white hover:border-emerald transition-all duration-500"
                 >
                   <social.Icon size={18} />

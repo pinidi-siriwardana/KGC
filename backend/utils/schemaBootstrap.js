@@ -94,6 +94,28 @@ const ensureCourtsSchema = async () => {
     }
 };
 
+// club_settings is a generic key-value store (already holds bank details and
+// fee amounts) — these are the club-identity keys the public site's
+// Contact/footer sections read, seeded once so the new admin Club Settings
+// page and the public pages always agree on the same values instead of each
+// hardcoding its own copy. INSERT IGNORE: never overwrites a value an admin
+// has already customized via the settings page.
+const ensureClubIdentitySettings = async () => {
+    const defaults = {
+        club_address: 'Peradeniya Road, Kandy, Sri Lanka',
+        club_email: 'hello@kandygardenclub.lk',
+        club_phone: '+94 (81) 222-3333',
+        club_opening_hours: 'Mon – Sun: 08:00 – 20:00',
+        club_facebook_url: '',
+        club_instagram_url: '',
+        club_twitter_url: '',
+    };
+
+    await Promise.all(Object.entries(defaults).map(([key, value]) =>
+        pool.query('INSERT IGNORE INTO club_settings (setting_key, setting_value) VALUES (?, ?)', [key, value])
+    ));
+};
+
 const ensureSchema = async () => {
     await ensureGuestsSchema();
     await ensurePaymentsSchema();
@@ -101,6 +123,7 @@ const ensureSchema = async () => {
     await backfillAdminStaffRecords();
     await ensureCoachesSchema();
     await ensureCourtsSchema();
+    await ensureClubIdentitySettings();
 };
 
 module.exports = { ensureSchema };

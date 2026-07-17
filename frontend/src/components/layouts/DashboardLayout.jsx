@@ -5,7 +5,7 @@ import {
   Users, UserCheck, UserPlus, MessageSquare,
   ShieldCheck, ClipboardCheck, CreditCard,
   BarChart3, Megaphone, LogOut, PlusCircle, History, UserCog, Menu, X,
-  CloudSun, Activity
+  CloudSun, Activity, Building2
 } from 'lucide-react';
 
 const SidebarContent = ({ role, closeMobileMenu }) => {
@@ -48,6 +48,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
       {
         group: "Account", items: [
           { name: 'Profile Settings', icon: UserCog, path: '/admin/profile' },
+          { name: 'Club Settings', icon: Building2, path: '/admin/settings' },
         ]
       },
       {
