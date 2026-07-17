@@ -398,10 +398,23 @@ const AdminBookings = () => {
                                 <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
                                     value={createForm.member_id} onChange={(e) => setCreateForm({ ...createForm, member_id: e.target.value })} required>
                                     <option value="" disabled>Select a member...</option>
-                                    {members.map((m) => (
-                                        <option key={m.member_id} value={m.member_id}>{m.full_name} — {m.email}</option>
-                                    ))}
+                                    {members.map((m) => {
+                                        // Same "proper membership" bar the backend enforces
+                                        // (no plan at all, or the current one's expired) —
+                                        // disabled here so the admin sees why before
+                                        // submitting, instead of only after a 403.
+                                        const ineligible = !m.membership_end_date || m.is_expired;
+                                        return (
+                                            <option key={m.member_id} value={m.member_id} disabled={ineligible}>
+                                                {m.full_name} — {m.email}
+                                                {ineligible ? (m.membership_end_date ? ' (Membership Expired)' : ' (No Membership)') : ''}
+                                            </option>
+                                        );
+                                    })}
                                 </select>
+                                <p className="text-slate-400 text-[10px] pt-1">
+                                    Members without an active membership are shown but can&apos;t be selected — they need a plan first.
+                                </p>
                                 <p className="text-amber-600 text-[10px] font-bold pt-1">
                                     Note: if this member self-cancels later, a LKR {cancellationFee ?? '...'} cancellation fee applies.
                                 </p>

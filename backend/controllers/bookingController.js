@@ -2,6 +2,7 @@ const fs = require('fs');
 const pool = require('../config/db');
 const { withTransaction } = pool;
 const { normalizeIfPhone } = require('../validation/common');
+const { getCurrentMembership } = require('../utils/membership');
 
 const badRequest = (m) => { const e = new Error(m); e.statusCode = 400; throw e; };
 const forbidden = (m) => { const e = new Error(m); e.statusCode = 403; throw e; };
@@ -9,6 +10,20 @@ const notFound = (m) => { const e = new Error(m); e.statusCode = 404; throw e; }
 const conflict = (m) => { const e = new Error(m); e.statusCode = 409; throw e; };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Same "proper membership" bar MembershipGate/memberPortalController.getMe
+// already enforce on the frontend (no membership row, or its end_date has
+// passed) — but that's a UI-only gate, so it never stopped a direct API
+// call, nor an admin booking on a member's behalf. This is the one place
+// both paths funnel through, so it closes the gap for both at once.
+const requireActiveMembership = async (member_id, byAdmin) => {
+    const membership = await getCurrentMembership(member_id);
+    if (!membership || membership.is_expired) {
+        forbidden(byAdmin
+            ? 'This member does not have an active membership and cannot be booked for.'
+            : 'You need an active membership to book a court.');
+    }
+};
 
 const BOOKING_SELECT = `
     SELECT b.*, c.court_name, c.court_type, ts.slot_name, ts.start_time, ts.end_time,
@@ -232,6 +247,7 @@ const createBooking = async (req, res) => {
             if (role === 'member') {
                 member_id = await resolveSelfId(connection, 'member', req.user.user_id);
                 if (!member_id) notFound('Member profile not found.');
+                await requireActiveMembership(member_id, false);
                 booking_type = 'member';
             } else if (role === 'coach') {
                 coach_id = await resolveSelfId(connection, 'coach', req.user.user_id);
@@ -248,6 +264,7 @@ const createBooking = async (req, res) => {
                     const [[m]] = await connection.query('SELECT member_id FROM members WHERE member_id = ?', [req.body.member_id]);
                     if (!m) badRequest('Invalid member_id.');
                     member_id = req.body.member_id;
+                    await requireActiveMembership(member_id, true);
                 } else if (booking_type === 'coach') {
                     if (!req.body.coach_id) badRequest('coach_id is required.');
                     const [[c]] = await connection.query('SELECT coach_id FROM coaches WHERE coach_id = ?', [req.body.coach_id]);
