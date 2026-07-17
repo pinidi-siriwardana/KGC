@@ -12,6 +12,12 @@ const getAttendanceHistoryQuerySchema = z.object({
     type: z.enum(['member', 'coach']).optional(),
 }).refine((obj) => !obj.from || !obj.to || obj.from <= obj.to, { message: 'from must be on or before to.' });
 
+// Self-service version — no search/type since it's always scoped to "me".
+const getMyAttendanceQuerySchema = z.object({
+    from: dateString.optional(),
+    to: dateString.optional(),
+}).refine((obj) => !obj.from || !obj.to || obj.from <= obj.to, { message: 'from must be on or before to.' });
+
 // Charging the fee is the default; an admin can explicitly waive it instead
 // (e.g. an excused absence) without it ever landing on the sweep's radar
 // again — see chargeNoShowFee in utils/noShowSweep.js.
@@ -50,6 +56,6 @@ const updateAttendanceSchema = z.object({
 });
 
 module.exports = {
-    getAttendanceQuerySchema, getAttendanceHistoryQuerySchema, checkInSchema, checkOutSchema,
+    getAttendanceQuerySchema, getAttendanceHistoryQuerySchema, getMyAttendanceQuerySchema, checkInSchema, checkOutSchema,
     updateAttendanceSchema, markNoShowSchema,
 };

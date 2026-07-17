@@ -64,6 +64,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
           { name: 'Book a Court', icon: PlusCircle, path: '/member/book' },
           { name: 'My Schedule', icon: CalendarClock, path: '/member/schedule' },
           { name: 'Booking History', icon: History, path: '/member/history' },
+          { name: 'My Attendance', icon: ClipboardCheck, path: '/member/attendance' },
         ]
       },
       {
@@ -86,6 +87,7 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
         group: "Training", items: [
           { name: 'Reserve Court', icon: PlusCircle, path: '/coach/book' },
           { name: 'Session Logs', icon: Timer, path: '/coach/sessions' },
+          { name: 'My Attendance', icon: ClipboardCheck, path: '/coach/attendance' },
         ]
       },
       {

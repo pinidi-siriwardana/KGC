@@ -2,23 +2,26 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken, requireRole } = require('../middleware/auth');
 const {
-    getAttendanceForDate, getAttendanceHistory, checkIn, checkOut, updateAttendance, markNoShow, getMyStats,
+    getAttendanceForDate, getAttendanceHistory, checkIn, checkOut, updateAttendance, deleteAttendance, markNoShow,
+    getMyStats, getMyHistory,
 } = require('../controllers/attendanceController');
 const { validate } = require('../middleware/validate');
 const { idParam } = require('../validation/common');
 const {
-    getAttendanceQuerySchema, getAttendanceHistoryQuerySchema, checkInSchema, checkOutSchema,
+    getAttendanceQuerySchema, getAttendanceHistoryQuerySchema, getMyAttendanceQuerySchema, checkInSchema, checkOutSchema,
     updateAttendanceSchema, markNoShowSchema,
 } = require('../validation/attendanceSchemas');
 
 router.use(verifyToken);
 
 router.get('/my-stats', requireRole('member', 'coach'), getMyStats);
+router.get('/my-history', requireRole('member', 'coach'), validate(getMyAttendanceQuerySchema, 'query'), getMyHistory);
 router.get('/history', requireRole('admin'), validate(getAttendanceHistoryQuerySchema, 'query'), getAttendanceHistory);
 router.get('/', requireRole('admin'), validate(getAttendanceQuerySchema, 'query'), getAttendanceForDate);
 router.post('/checkin', requireRole('admin'), validate(checkInSchema), checkIn);
 router.patch('/:id/checkout', requireRole('admin'), validate(idParam(), 'params'), validate(checkOutSchema), checkOut);
 router.patch('/:id', requireRole('admin'), validate(idParam(), 'params'), validate(updateAttendanceSchema), updateAttendance);
+router.delete('/:id', requireRole('admin'), validate(idParam(), 'params'), deleteAttendance);
 router.post('/:booking_id/no-show', requireRole('admin'), validate(idParam('booking_id'), 'params'), validate(markNoShowSchema), markNoShow);
 
 module.exports = router;

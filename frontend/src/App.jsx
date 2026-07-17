@@ -50,6 +50,7 @@ import CoachInquiry from './pages/coach/CoachInquiry';
 
 import WeatherForecast from './pages/common/WeatherForecast';
 import FitnessCalculator from './pages/common/FitnessCalculator';
+import AttendanceLog from './pages/common/AttendanceLog';
 
 const MainContent = () => {
   const location = useLocation();
@@ -116,10 +117,11 @@ const MainContent = () => {
                 <Route path="/member/status" element={<MembershipInfo />} />
               </Route>
               {/* Outside the gate — a blocked/expired member still needs a way to reach admin,
-                  and weather/fitness tools aren't tied to membership status either */}
+                  and weather/fitness/attendance-history aren't tied to membership status either */}
               <Route path="/member/inquiry" element={<MemberInquiry />} />
               <Route path="/member/weather" element={<WeatherForecast />} />
               <Route path="/member/fitness" element={<FitnessCalculator />} />
+              <Route path="/member/attendance" element={<AttendanceLog />} />
             </Route>
           </Route>
 
@@ -135,6 +137,7 @@ const MainContent = () => {
               <Route path="/coach/inquiry" element={<CoachInquiry />} />
               <Route path="/coach/weather" element={<WeatherForecast />} />
               <Route path="/coach/fitness" element={<FitnessCalculator />} />
+              <Route path="/coach/attendance" element={<AttendanceLog />} />
             </Route>
           </Route>
         </Routes>

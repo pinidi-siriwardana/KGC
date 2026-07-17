@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { CalendarDays, UserPlus, LogOut, Ban, CheckCircle2, Clock, Pencil, History, ShieldOff } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { CalendarDays, UserPlus, LogOut, Ban, CheckCircle2, Clock, Pencil, History, ShieldOff, ChevronLeft, ChevronRight, Check, RotateCcw } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
+
+const ATTENDEE_PAGE_SIZE = 8;
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -33,8 +35,11 @@ const AdminAttendance = () => {
     const [members, setMembers] = useState([]);
     const [coaches, setCoaches] = useState([]);
     const [addAttendeeFor, setAddAttendeeFor] = useState(null);
-    const [addAttendeeValue, setAddAttendeeValue] = useState('');
     const [addAttendeeTime, setAddAttendeeTime] = useState('');
+    const [addAttendeeSearch, setAddAttendeeSearch] = useState('');
+    const [addAttendeeTypeFilter, setAddAttendeeTypeFilter] = useState('');
+    const [addAttendeePage, setAddAttendeePage] = useState(1);
+    const [addAttendeeSelected, setAddAttendeeSelected] = useState(null);
     const [editingAttendee, setEditingAttendee] = useState(null);
     const [editForm, setEditForm] = useState({ checkin_time: '', checkout_time: '' });
     const [noShowFor, setNoShowFor] = useState(null);
@@ -84,42 +89,69 @@ const AdminAttendance = () => {
 
     useEffect(() => { fetchHistory(); }, [historyFilters]);
 
+    // Combined, searchable pool for the Add Attendee picker — the plain
+    // <select> this replaced became unusable once the member/coach lists
+    // grew past a couple dozen names, so this is search + pagination over
+    // the same two lists instead of one giant dropdown.
+    const attendeePool = useMemo(() => [
+        ...members.map((m) => ({ kind: 'member', id: m.member_id, name: m.full_name })),
+        ...coaches.map((c) => ({ kind: 'coach', id: c.coach_id, name: c.full_name })),
+    ], [members, coaches]);
+
+    const filteredAttendeePool = useMemo(() => {
+        const q = addAttendeeSearch.trim().toLowerCase();
+        return attendeePool.filter((p) =>
+            (!addAttendeeTypeFilter || p.kind === addAttendeeTypeFilter) &&
+            (!q || p.name.toLowerCase().includes(q))
+        );
+    }, [attendeePool, addAttendeeSearch, addAttendeeTypeFilter]);
+
+    const attendeePageCount = Math.max(1, Math.ceil(filteredAttendeePool.length / ATTENDEE_PAGE_SIZE));
+    // Search/filter can narrow the results while a later page is still
+    // selected — clamp so that doesn't render an out-of-range empty slice.
+    const attendeeCurrentPage = Math.min(addAttendeePage, attendeePageCount);
+    const pagedAttendeePool = filteredAttendeePool.slice(
+        (attendeeCurrentPage - 1) * ATTENDEE_PAGE_SIZE,
+        attendeeCurrentPage * ATTENDEE_PAGE_SIZE
+    );
+
     const flash = (setter, text) => {
         setter(text);
         setTimeout(() => setter(''), 4000);
     };
 
-    const handleCheckIn = async (booking_id, memberId, coachId) => {
+    const handleOpenAddAttendee = (booking_id) => {
+        setAddAttendeeFor(booking_id);
+        setAddAttendeeTime(nowLocalInputValue());
+        setAddAttendeeSearch('');
+        setAddAttendeeTypeFilter('');
+        setAddAttendeePage(1);
+        setAddAttendeeSelected(null);
+    };
+
+    const handleAddAttendeeSubmit = async (e) => {
+        e.preventDefault();
+        if (!addAttendeeSelected) {
+            flash(setError, 'Select a member or coach to check in first.');
+            return;
+        }
+
         const res = await apiFetch('/api/attendance/checkin', {
             method: 'POST',
             body: JSON.stringify({
-                booking_id,
-                member_id: memberId || undefined,
-                coach_id: coachId || undefined,
+                booking_id: addAttendeeFor,
+                member_id: addAttendeeSelected.kind === 'member' ? addAttendeeSelected.id : undefined,
+                coach_id: addAttendeeSelected.kind === 'coach' ? addAttendeeSelected.id : undefined,
                 checkin_time: addAttendeeTime || undefined,
             }),
         });
         if (res.ok) {
             setAddAttendeeFor(null);
-            setAddAttendeeValue('');
-            setAddAttendeeTime('');
             fetchAttendance();
         } else {
             const err = await res.json();
             flash(setError, err.message || 'Failed to check in.');
         }
-    };
-
-    const handleOpenAddAttendee = (booking_id) => {
-        setAddAttendeeFor(booking_id);
-        setAddAttendeeValue('');
-        setAddAttendeeTime(nowLocalInputValue());
-    };
-
-    const handleAddAttendee = (booking_id) => {
-        if (!addAttendeeValue) return;
-        const [kind, id] = addAttendeeValue.split(':');
-        handleCheckIn(booking_id, kind === 'member' ? id : null, kind === 'coach' ? id : null);
     };
 
     const handleCheckOut = async (attendance_id) => {
@@ -161,6 +193,25 @@ const AdminAttendance = () => {
         }
     };
 
+    // Undoes a check-in entirely — for when editing the time isn't enough
+    // (e.g. the wrong person was selected). Lives in the same modal as the
+    // time edit so there's one place to fix any mistake, not a maze of
+    // buttons for each kind of correction.
+    const handleDeleteAttendee = async () => {
+        if (!window.confirm(`Remove ${editingAttendee.attendee_name}'s check-in? This can't be undone, but they can be checked in again.`)) return;
+
+        const res = await apiFetch(`/api/attendance/${editingAttendee.attendance_id}`, { method: 'DELETE' });
+        if (res.ok) {
+            setEditingAttendee(null);
+            flash(setSuccess, 'Check-in removed.');
+            fetchAttendance();
+            fetchHistory();
+        } else {
+            const err = await res.json();
+            flash(setError, err.message || 'Failed to remove attendance record.');
+        }
+    };
+
     const handleOpenNoShow = (booking_id) => {
         setNoShowFor(booking_id);
         setWaiveNoShow(false);
@@ -182,23 +233,31 @@ const AdminAttendance = () => {
         }
     };
 
-    // Waives a fee that's already been charged (manually or by the
-    // automatic sweep) — reuses the same payments status-update endpoint
-    // the Payments page's own "Waive Fee" action uses.
-    const handleWaiveCharged = async (payment_id) => {
-        if (!window.confirm('Waive this no-show fee? The member/coach will no longer owe this amount.')) return;
+    // Moves a no-show fee between charged ('recorded') and waived, in
+    // either direction — reuses the same payments status-update endpoint
+    // the Payments page's own "Waive Fee" action uses. A waiver isn't
+    // final: an admin who waived one by mistake (or changes their mind)
+    // can reinstate it exactly the same way.
+    const handleNoShowStatusChange = async (payment_id, status, confirmMessage) => {
+        if (!window.confirm(confirmMessage)) return;
         const res = await apiFetch(`/api/payments/update/${payment_id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ status: 'waived' }),
+            body: JSON.stringify({ status }),
         });
         if (res.ok) {
-            flash(setSuccess, 'No-show fee waived.');
+            flash(setSuccess, status === 'waived' ? 'No-show fee waived.' : 'No-show fee reinstated.');
             fetchAttendance();
         } else {
             const err = await res.json();
-            flash(setError, err.message || 'Failed to waive fee.');
+            flash(setError, err.message || 'Failed to update fee status.');
         }
     };
+
+    const handleWaiveCharged = (payment_id) =>
+        handleNoShowStatusChange(payment_id, 'waived', 'Waive this no-show fee? The member/coach will no longer owe this amount.');
+
+    const handleUndoWaive = (payment_id) =>
+        handleNoShowStatusChange(payment_id, 'recorded', 'Undo this waiver? The no-show fee will be marked as owed again.');
 
     return (
         <div className="p-6 space-y-6">
@@ -276,45 +335,10 @@ const AdminAttendance = () => {
                                                 <p className="text-slate-300 text-[10px] font-bold uppercase">No check-ins yet</p>
                                             )}
 
-                                            {addAttendeeFor === r.booking_id ? (
-                                                <div className="flex flex-wrap items-center gap-2 pt-1">
-                                                    <select value={addAttendeeValue} onChange={(e) => setAddAttendeeValue(e.target.value)}
-                                                        className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] outline-none">
-                                                        <option value="">Select person...</option>
-                                                        <optgroup label="Members">
-                                                            {members.map((m) => (
-                                                                <option key={`m-${m.member_id}`} value={`member:${m.member_id}`}>{m.full_name}</option>
-                                                            ))}
-                                                        </optgroup>
-                                                        <optgroup label="Coaches">
-                                                            {coaches.map((c) => (
-                                                                <option key={`c-${c.coach_id}`} value={`coach:${c.coach_id}`}>{c.full_name}</option>
-                                                            ))}
-                                                        </optgroup>
-                                                    </select>
-                                                    <input
-                                                        type="datetime-local"
-                                                        value={addAttendeeTime}
-                                                        max={nowLocalInputValue()}
-                                                        onChange={(e) => setAddAttendeeTime(e.target.value)}
-                                                        title="Check-in time"
-                                                        className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] outline-none"
-                                                    />
-                                                    <button onClick={() => handleAddAttendee(r.booking_id)}
-                                                        className="text-[9px] font-black uppercase tracking-widest bg-slate-900 text-white px-2 py-1.5 rounded-lg hover:bg-slate-800">
-                                                        Check In
-                                                    </button>
-                                                    <button onClick={() => { setAddAttendeeFor(null); setAddAttendeeValue(''); setAddAttendeeTime(''); }}
-                                                        className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <button onClick={() => handleOpenAddAttendee(r.booking_id)}
-                                                    className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-emerald-600 hover:text-emerald-700 pt-1 w-fit">
-                                                    <UserPlus size={11} /> Add Attendee
-                                                </button>
-                                            )}
+                                            <button onClick={() => handleOpenAddAttendee(r.booking_id)}
+                                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-emerald-600 hover:text-emerald-700 pt-1 w-fit">
+                                                <UserPlus size={11} /> Add Attendee
+                                            </button>
                                         </div>
                                     </td>
                                     <td className="p-4 text-right">
@@ -335,9 +359,15 @@ const AdminAttendance = () => {
                                                 </button>
                                             </div>
                                         ) : r.no_show_payment_id && r.no_show_status === 'waived' ? (
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded-full">
-                                                No-Show — Waived
-                                            </span>
+                                            <div className="flex flex-col items-end gap-1.5">
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded-full">
+                                                    No-Show — Waived
+                                                </span>
+                                                <button onClick={() => handleUndoWaive(r.no_show_payment_id)}
+                                                    className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-red-600">
+                                                    <RotateCcw size={10} /> Undo Waive
+                                                </button>
+                                            </div>
                                         ) : !r.slot_has_passed && r.attendees.length === 0 ? (
                                             <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">Slot in progress</span>
                                         ) : null}
@@ -391,11 +421,12 @@ const AdminAttendance = () => {
                                 <th className="p-4 font-black">Court / Time</th>
                                 <th className="p-4 font-black">Check-In</th>
                                 <th className="p-4 font-black">Check-Out</th>
+                                <th className="p-4 font-black text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {historyRows.map((h) => (
-                                <tr key={h.attendance_id} className="hover:bg-slate-50 transition-colors">
+                                <tr key={h.attendance_id} className="hover:bg-slate-50 transition-colors group">
                                     <td className="p-4 text-slate-900 text-sm font-bold">{h.attendee_name}</td>
                                     <td className="p-4">
                                         <span className="text-[9px] font-black uppercase px-2 py-1 rounded-md border bg-slate-50 text-slate-600 border-slate-100">
@@ -408,6 +439,13 @@ const AdminAttendance = () => {
                                     </td>
                                     <td className="p-4 text-slate-600 text-[11px] font-mono">{timeOf(h.checkin_time)}</td>
                                     <td className="p-4 text-slate-600 text-[11px] font-mono">{h.checkout_time ? timeOf(h.checkout_time) : '—'}</td>
+                                    <td className="p-4 text-right">
+                                        <button onClick={() => handleOpenEdit(h)}
+                                            title="Edit check-in/check-out time"
+                                            className="ml-auto flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 px-2 py-1 rounded-lg hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Pencil size={11} /> Edit
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -420,6 +458,90 @@ const AdminAttendance = () => {
                     )}
                 </div>
             </div>
+
+            <Modal
+                isOpen={!!addAttendeeFor}
+                onClose={() => setAddAttendeeFor(null)}
+                title="Add Attendee"
+                submitText="Check In"
+                onSubmit={handleAddAttendeeSubmit}
+            >
+                <div className="space-y-4">
+                    <div className="flex gap-2">
+                        <SearchInput
+                            value={addAttendeeSearch}
+                            onChange={(e) => { setAddAttendeeSearch(e.target.value); setAddAttendeePage(1); }}
+                            placeholder="Search by name..."
+                            className="flex-1"
+                        />
+                        <FilterSelect
+                            value={addAttendeeTypeFilter}
+                            onChange={(e) => { setAddAttendeeTypeFilter(e.target.value); setAddAttendeePage(1); }}
+                            options={TYPE_OPTIONS}
+                        />
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                        {pagedAttendeePool.map((p) => {
+                            const isSelected = addAttendeeSelected?.kind === p.kind && addAttendeeSelected?.id === p.id;
+                            return (
+                                <button
+                                    type="button"
+                                    key={`${p.kind}-${p.id}`}
+                                    onClick={() => setAddAttendeeSelected(p)}
+                                    className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${
+                                        isSelected ? 'bg-slate-900 text-white' : 'hover:bg-slate-50 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="flex items-center gap-2 font-bold">
+                                        {isSelected && <Check size={12} />}
+                                        {p.name}
+                                    </span>
+                                    <span className={`text-[9px] font-black uppercase tracking-widest ${isSelected ? 'text-white/60' : 'text-slate-400'}`}>
+                                        {p.kind}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                        {pagedAttendeePool.length === 0 && (
+                            <p className="px-4 py-6 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No matches</p>
+                        )}
+                    </div>
+
+                    {filteredAttendeePool.length > ATTENDEE_PAGE_SIZE && (
+                        <div className="flex items-center justify-between">
+                            <button type="button" disabled={attendeeCurrentPage === 1} onClick={() => setAddAttendeePage((p) => p - 1)}
+                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-500 disabled:opacity-30 px-3 py-1.5 rounded-lg hover:bg-slate-100">
+                                <ChevronLeft size={12} /> Prev
+                            </button>
+                            <span className="text-[10px] text-slate-400 font-bold">
+                                Page {attendeeCurrentPage} of {attendeePageCount} · {filteredAttendeePool.length} match{filteredAttendeePool.length === 1 ? '' : 'es'}
+                            </span>
+                            <button type="button" disabled={attendeeCurrentPage === attendeePageCount} onClick={() => setAddAttendeePage((p) => p + 1)}
+                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-500 disabled:opacity-30 px-3 py-1.5 rounded-lg hover:bg-slate-100">
+                                Next <ChevronRight size={12} />
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Check-In Time</label>
+                        <input
+                            type="datetime-local"
+                            value={addAttendeeTime}
+                            max={nowLocalInputValue()}
+                            onChange={(e) => setAddAttendeeTime(e.target.value)}
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                        />
+                    </div>
+
+                    {addAttendeeSelected && (
+                        <p className="text-[11px] text-slate-500">
+                            Checking in <span className="font-bold text-slate-700">{addAttendeeSelected.name}</span> ({addAttendeeSelected.kind})
+                        </p>
+                    )}
+                </div>
+            </Modal>
 
             <Modal
                 isOpen={!!editingAttendee}
@@ -449,6 +571,13 @@ const AdminAttendance = () => {
                             value={editForm.checkout_time}
                             onChange={(e) => setEditForm({ ...editForm, checkout_time: e.target.value })}
                         />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100">
+                        <button type="button" onClick={handleDeleteAttendee}
+                            className="w-full text-center text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-700 py-2">
+                            Wrong person? Remove this check-in
+                        </button>
                     </div>
                 </div>
             </Modal>

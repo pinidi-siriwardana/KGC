@@ -221,6 +221,25 @@ const updateAttendance = async (req, res) => {
     }
 };
 
+// Undoes a check-in entirely (wrong person selected, added by mistake,
+// etc.) — a mistake here shouldn't be permanent just because "Edit" only
+// covers the times, not who it's for. Removing it also makes the booking
+// eligible for no-show handling again, same as if nobody had ever checked
+// in — which is the correct behavior, not a side effect to guard against.
+const deleteAttendance = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const [result] = await pool.query('DELETE FROM attendance WHERE attendance_id = ?', [id]);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Attendance record not found.' });
+        }
+        res.json({ message: 'Attendance record removed.' });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to remove attendance record.', error: err.message });
+    }
+};
+
 // Admin manually flags a confirmed booking with zero attendance as a
 // no-show, and either charges the club's no_show_fee or explicitly waives
 // it (e.g. an excused absence — `waive: true` in the body). In the normal
@@ -314,4 +333,43 @@ const getMyStats = async (req, res) => {
     }
 };
 
-module.exports = { getAttendanceForDate, getAttendanceHistory, checkIn, checkOut, updateAttendance, markNoShow, getMyStats };
+// A member/coach's own check-in/check-out log — same underlying data as
+// the admin's Attendance History, but scoped to just their own records
+// (via resolveSelfId, same helper getMyStats uses above) instead of the
+// admin's name search/type filter, since there's nothing to disambiguate
+// when it's always "me".
+const getMyHistory = async (req, res) => {
+    try {
+        const selfId = await resolveSelfId(pool, req.user.role, req.user.user_id);
+        if (!selfId) return res.json({ data: [] });
+
+        const idCol = req.user.role === 'member' ? 'member_id' : 'coach_id';
+        const { from, to } = req.query;
+
+        const conditions = [`a.${idCol} = ?`];
+        const values = [selfId];
+        if (from) { conditions.push('DATE(a.checkin_time) >= ?'); values.push(from); }
+        if (to) { conditions.push('DATE(a.checkin_time) <= ?'); values.push(to); }
+
+        const [rows] = await pool.query(
+            `SELECT a.attendance_id, a.checkin_time, a.checkout_time,
+                    b.booking_date, c.court_name, ts.slot_name, ts.start_time, ts.end_time
+             FROM attendance a
+             LEFT JOIN bookings b ON a.booking_id = b.booking_id
+             LEFT JOIN courts c ON b.court_id = c.court_id
+             LEFT JOIN time_slots ts ON b.slot_id = ts.slot_id
+             WHERE ${conditions.join(' AND ')}
+             ORDER BY a.checkin_time DESC`,
+            values
+        );
+
+        res.json({ data: rows });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to fetch attendance history.', error: err.message });
+    }
+};
+
+module.exports = {
+    getAttendanceForDate, getAttendanceHistory, checkIn, checkOut, updateAttendance, deleteAttendance, markNoShow,
+    getMyStats, getMyHistory,
+};
