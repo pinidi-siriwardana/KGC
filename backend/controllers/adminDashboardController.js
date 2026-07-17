@@ -74,6 +74,48 @@ const fetchMembersAwaitingPlan = async () => {
     return rows;
 };
 
+// Every "needs a look" item on the dashboard funnels through here as one
+// typed, linkable list instead of separate one-off banners — a banner
+// blocks the page above the fold no matter how small the count; a list
+// inside its own contained panel doesn't, and scales to more sources later
+// without needing a new banner each time.
+const buildNotifications = ({ membersAwaitingPlan, pendingVerifications, unreadInquiries }) => {
+    const items = [];
+
+    if (membersAwaitingPlan.length > 0) {
+        const names = membersAwaitingPlan.slice(0, 3).map((m) => m.full_name).join(', ');
+        items.push({
+            type: 'members_awaiting_plan',
+            severity: 'warning',
+            title: `${membersAwaitingPlan.length} member${membersAwaitingPlan.length > 1 ? 's' : ''} awaiting a membership plan`,
+            message: `${names}${membersAwaitingPlan.length > 3 ? ', …' : ''} registered with no plan selected.`,
+            link: '/admin/payments',
+        });
+    }
+
+    if (pendingVerifications > 0) {
+        items.push({
+            type: 'pending_verifications',
+            severity: 'warning',
+            title: `${pendingVerifications} receipt${pendingVerifications > 1 ? 's' : ''} awaiting verification`,
+            message: 'Review and approve or reject submitted payment slips.',
+            link: '/admin/verify-payments',
+        });
+    }
+
+    if (unreadInquiries > 0) {
+        items.push({
+            type: 'unread_inquiries',
+            severity: 'info',
+            title: `${unreadInquiries} unread inquir${unreadInquiries > 1 ? 'ies' : 'y'}`,
+            message: 'New messages submitted through the public contact form.',
+            link: '/admin/inquiries',
+        });
+    }
+
+    return items;
+};
+
 const getDashboardOverview = async (req, res) => {
     try {
         const [
@@ -119,6 +161,11 @@ const getDashboardOverview = async (req, res) => {
                     count: membersAwaitingPlan.length,
                     recent: membersAwaitingPlan.slice(0, 5),
                 },
+                notifications: buildNotifications({
+                    membersAwaitingPlan,
+                    pendingVerifications: Number(pendingApps.count),
+                    unreadInquiries: Number(unreadInquiries.count),
+                }),
             },
         });
     } catch (err) {

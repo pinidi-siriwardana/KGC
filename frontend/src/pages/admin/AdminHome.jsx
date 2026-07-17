@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
     Users, DollarSign, Activity, CalendarCheck, TrendingUp, TrendingDown,
-    ShieldCheck, MessageSquare, Trophy, UserCheck, ArrowRight, ClipboardCheck, AlertTriangle,
+    ShieldCheck, MessageSquare, Trophy, UserCheck, ArrowRight, ClipboardCheck, Bell, CheckCircle2,
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import StatCard from '../../components/common/StatCard';
@@ -13,6 +13,12 @@ const CHART_INK = { grid: '#e1e0d9', axis: '#c3c2b7', muted: '#898781' };
 
 const ACTIVITY_ICON = { booking: CalendarCheck, verification: ShieldCheck, inquiry: MessageSquare };
 const ACTIVITY_DOT = { booking: 'bg-emerald-500', verification: 'bg-amber-500', inquiry: 'bg-blue-500' };
+
+const NOTIFICATION_ICON = { members_awaiting_plan: Users, pending_verifications: ShieldCheck, unread_inquiries: MessageSquare };
+const NOTIFICATION_TONE = {
+    warning: { icon: 'bg-amber-100 text-amber-600', hover: 'hover:border-amber-200 hover:bg-amber-50/50', arrow: 'group-hover/notif:text-amber-500' },
+    info: { icon: 'bg-blue-100 text-blue-600', hover: 'hover:border-blue-200 hover:bg-blue-50/50', arrow: 'group-hover/notif:text-blue-500' },
+};
 
 const QUICK_LINKS = [
     { label: 'Verify Receipts', to: '/admin/verify-payments', icon: ShieldCheck },
@@ -105,31 +111,6 @@ const AdminHome = () => {
                     <p className="text-emerald-600 font-mono text-sm">OPERATIONAL</p>
                 </div>
             </header>
-
-            {/* Highlighted notification: members registered without a plan yet */}
-            {!loading && overview?.membersAwaitingPlan?.count > 0 && (
-                <div className="relative z-10 flex items-start gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-6 py-5 shadow-sm">
-                    <div className="p-2 bg-amber-500/10 rounded-xl shrink-0">
-                        <AlertTriangle className="text-amber-600" size={20} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-amber-800 text-sm font-black uppercase tracking-wide">
-                            {overview.membersAwaitingPlan.count} member{overview.membersAwaitingPlan.count > 1 ? 's' : ''} awaiting a membership plan
-                        </p>
-                        <p className="text-amber-700/80 text-[11px] mt-1">
-                            {overview.membersAwaitingPlan.recent.map((m) => m.full_name).join(', ')}
-                            {overview.membersAwaitingPlan.count > overview.membersAwaitingPlan.recent.length ? ', …' : ''}
-                            {' '}registered with no plan selected — assign one from Payments to collect their fee.
-                        </p>
-                    </div>
-                    <Link
-                        to="/admin/payments"
-                        className="shrink-0 text-[9px] font-black uppercase tracking-widest bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-all no-underline"
-                    >
-                        Assign Plan
-                    </Link>
-                </div>
-            )}
 
             {/* Stats Grid */}
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -235,39 +216,87 @@ const AdminHome = () => {
                     )}
                 </div>
 
-                {/* Activity Sidebar */}
-                <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8 h-[450px] flex flex-col">
-                    <h3 className="text-slate-800 text-lg font-serif italic mb-6">Recent Pulse</h3>
-                    <div className="space-y-5 overflow-y-auto flex-1 pr-1">
-                        {loading ? (
-                            <p className="text-slate-400 text-xs uppercase tracking-widest font-bold">Loading...</p>
-                        ) : (overview?.recentActivity || []).length === 0 ? (
-                            <p className="text-slate-400 text-xs uppercase tracking-widest font-bold">No recent activity</p>
-                        ) : (
-                            overview.recentActivity.map((item, i) => (
-                                <div key={i} className="flex gap-4 items-start">
-                                    <div className={`w-2 h-2 rounded-full mt-1.5 shadow-[0_0_8px_rgba(0,0,0,0.15)] ${ACTIVITY_DOT[item.type] || 'bg-slate-400'}`} />
-                                    <div className="min-w-0">
-                                        <p className="text-slate-700 text-xs font-bold leading-tight">{item.title}</p>
-                                        <p className="text-slate-400 text-[10px] mt-0.5 truncate" title={item.subtitle}>{item.subtitle}</p>
-                                        <p className="text-slate-300 text-[9px] uppercase mt-1 font-bold tracking-widest">{timeAgo(item.timestamp)}</p>
-                                    </div>
+                {/* Right column: Notifications above Recent Pulse */}
+                <div className="flex flex-col gap-8">
+
+                    {/* Notifications — pending work that needs a look, replaces the old blocking banner */}
+                    <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-slate-800 text-lg font-serif italic">Notifications</h3>
+                            {!loading && (overview?.notifications || []).length > 0 && (
+                                <span className="text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">
+                                    {overview.notifications.length} Pending
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                            {loading ? (
+                                <p className="text-slate-400 text-xs uppercase tracking-widest font-bold">Loading...</p>
+                            ) : (overview?.notifications || []).length === 0 ? (
+                                <div className="flex items-center gap-3 py-2">
+                                    <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                                    <p className="text-slate-400 text-xs font-bold">All caught up — nothing pending</p>
                                 </div>
-                            ))
-                        )}
+                            ) : (
+                                overview.notifications.map((item) => {
+                                    const Icon = NOTIFICATION_ICON[item.type] || Bell;
+                                    const tone = NOTIFICATION_TONE[item.severity] || NOTIFICATION_TONE.info;
+                                    return (
+                                        <Link
+                                            key={item.type} to={item.link}
+                                            className={`group/notif flex items-start gap-3 border border-slate-100 rounded-xl px-3 py-3 no-underline transition-all ${tone.hover}`}
+                                        >
+                                            <div className={`p-1.5 rounded-lg shrink-0 ${tone.icon}`}>
+                                                <Icon size={14} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-slate-700 text-xs font-bold leading-tight">{item.title}</p>
+                                                <p className="text-slate-400 text-[10px] mt-0.5 truncate" title={item.message}>{item.message}</p>
+                                            </div>
+                                            <ArrowRight size={12} className={`shrink-0 mt-1 text-slate-300 transition-colors ${tone.arrow}`} />
+                                        </Link>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
 
-                    <div className="space-y-1.5 mt-6 pt-6 border-t border-slate-100">
-                        {QUICK_LINKS.map(({ label, to, icon: Icon }) => (
-                            <Link
-                                key={to} to={to}
-                                className="flex items-center justify-between gap-2 py-2.5 px-3 border border-slate-200 rounded-xl text-[9px] text-slate-600 uppercase tracking-wide font-black hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all no-underline group/link"
-                            >
-                                <span className="flex items-center gap-2"><Icon size={12} className="shrink-0" /> {label}</span>
-                                <ArrowRight size={10} className="opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
-                            </Link>
-                        ))}
+                    {/* Activity Sidebar */}
+                    <div className="bg-white border border-slate-100 shadow-sm rounded-3xl p-8 flex-1 flex flex-col">
+                        <h3 className="text-slate-800 text-lg font-serif italic mb-6">Recent Pulse</h3>
+                        <div className="space-y-5 overflow-y-auto flex-1 pr-1">
+                            {loading ? (
+                                <p className="text-slate-400 text-xs uppercase tracking-widest font-bold">Loading...</p>
+                            ) : (overview?.recentActivity || []).length === 0 ? (
+                                <p className="text-slate-400 text-xs uppercase tracking-widest font-bold">No recent activity</p>
+                            ) : (
+                                overview.recentActivity.map((item, i) => (
+                                    <div key={i} className="flex gap-4 items-start">
+                                        <div className={`w-2 h-2 rounded-full mt-1.5 shadow-[0_0_8px_rgba(0,0,0,0.15)] ${ACTIVITY_DOT[item.type] || 'bg-slate-400'}`} />
+                                        <div className="min-w-0">
+                                            <p className="text-slate-700 text-xs font-bold leading-tight">{item.title}</p>
+                                            <p className="text-slate-400 text-[10px] mt-0.5 truncate" title={item.subtitle}>{item.subtitle}</p>
+                                            <p className="text-slate-300 text-[9px] uppercase mt-1 font-bold tracking-widest">{timeAgo(item.timestamp)}</p>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <div className="space-y-1.5 mt-6 pt-6 border-t border-slate-100">
+                            {QUICK_LINKS.map(({ label, to, icon: Icon }) => (
+                                <Link
+                                    key={to} to={to}
+                                    className="flex items-center justify-between gap-2 py-2.5 px-3 border border-slate-200 rounded-xl text-[9px] text-slate-600 uppercase tracking-wide font-black hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all no-underline group/link"
+                                >
+                                    <span className="flex items-center gap-2"><Icon size={12} className="shrink-0" /> {label}</span>
+                                    <ArrowRight size={10} className="opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
+                                </Link>
+                            ))}
+                        </div>
                     </div>
+
                 </div>
 
             </div>
