@@ -1,331 +1,298 @@
-SET SQL\_MODE \= "NO\_AUTO\_VALUE\_ON\_ZERO";  
-START TRANSACTION;  
-SET time\_zone \= "+00:00";
+# Kandy Garden Club — Database Structure
 
-CREATE DATABASE IF NOT EXISTS \`kandy\_garden\_club\_db\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4\_general\_ci;  
-USE \`kandy\_garden\_club\_db\`;
+Generated from the live schema (`SHOW CREATE TABLE`) rather than hand-maintained — this reflects exactly what's deployed, not what was originally designed. **17 tables**, MariaDB/MySQL, InnoDB, `utf8mb4`.
 
-\-- \=========================================================================  
-\-- MODULE 1: ACCESS CONTROL & USER ACCOUNTS  
-\-- \=========================================================================
+Two conventions worth knowing before reading the tables:
 
-CREATE TABLE \`users\` (  
-  \`user\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`username\` VARCHAR(50) NOT NULL,  
-  \`password\_hash\` VARCHAR(255) NOT NULL,  
-  \`role\` ENUM('admin', 'member', 'coach') NOT NULL DEFAULT 'member',  
-  \`status\` ENUM('active', 'pending', 'disabled') DEFAULT 'pending',  
-  \`created\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  PRIMARY KEY (\`user\_id\`),  
-  UNIQUE KEY \`username\` (\`username\`)  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+- **No migration framework.** Every column/table here was added by an idempotent statement in `backend/utils/schemaBootstrap.js`, run at every server boot. There's no separate migration history — the code *is* the history.
+- **`dateStrings: true`** on the connection pool — `DATE`/`DATETIME`/`TIMESTAMP` columns come back as plain strings from queries, not JS `Date` objects, specifically to avoid timezone-shift bugs.
 
-\-- Sample user table entries (sanitized placeholder data)  
-INSERT INTO \`users\` (\`user\_id\`, \`username\`, \`password\_hash\`, \`role\`, \`status\`, \`created\_at\`) VALUES  
-(3, 'sample\_coach1', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'coach', 'active', '2026-04-19 04:23:38'),  
-(19, 'sample\_admin', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'admin', 'active', '2026-04-26 06:15:07'),  
-(20, 'sample\_member1', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'member', 'active', '2026-04-26 06:16:44'),  
-(21, 'sample\_coach2', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'coach', 'active', '2026-04-26 06:17:17'),  
-(23, 'sample\_member2', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'member', 'pending', '2026-05-01 10:09:05'),  
-(24, 'sample\_member3', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'member', 'pending', '2026-05-29 12:45:40');
+---
 
-\-- \=========================================================================  
-\-- MODULE 2: SUBSCRIPTION TIERS & MASTER RULES  
-\-- \=========================================================================
+## Contents
 
-CREATE TABLE \`membership\_types\` (  
-  \`membership\_type\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`name\` VARCHAR(100) NOT NULL,  
-  \`duration\_months\` INT(11) NOT NULL,  
-  \`price\` DECIMAL(10,2) NOT NULL,  
-  \`created\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  PRIMARY KEY (\`membership\_type\_id\`)  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+1. [Access control & accounts](#1-access-control--accounts) — `users`, `members`, `coaches`, `staff`, `guests`
+2. [Membership](#2-membership) — `membership_types`, `memberships`
+3. [Courts & scheduling](#3-courts--scheduling) — `courts`, `time_slots`, `bookings`, `attendance`
+4. [Money](#4-money) — `payment_verification`, `payments`
+5. [Registration pipeline](#5-registration-pipeline) — `registration_requests`
+6. [Public-site content](#6-public-site-content) — `contact_inquiries`, `announcements`
+7. [Configuration](#7-configuration) — `club_settings`
+8. [Entity relationship summary](#8-entity-relationship-summary)
 
-INSERT INTO \`membership\_types\` (\`membership\_type\_id\`, \`name\`, \`duration\_months\`, \`price\`, \`created\_at\`) VALUES  
-(1, 'Junior Membership', 6, 7500.00, '2026-04-19 06:35:39'),  
-(2, 'Senior Membership', 6, 10000.00, '2026-04-19 06:35:39');
+---
 
-CREATE TABLE \`time\_slots\` (  
-  \`slot\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`slot\_name\` VARCHAR(50) NOT NULL,  
-  \`start\_time\` TIME NOT NULL,  
-  \`end\_time\` TIME NOT NULL,  
-  PRIMARY KEY (\`slot\_id\`)  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+## 1. Access control & accounts
 
-CREATE TABLE \`courts\` (  
-  \`court\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`court\_name\` VARCHAR(50) NOT NULL,  
-  \`court\_type\` VARCHAR(30) DEFAULT 'Clay',  
-  \`status\` ENUM('available', 'maintenance') DEFAULT 'available',  
-  \`is\_active\` TINYINT(1) DEFAULT 1,  
-  \`created\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  PRIMARY KEY (\`court\_id\`),  
-  UNIQUE KEY \`court\_name\` (\`court\_name\`)  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+### `users`
+The login table — one row per account regardless of role. A role alone doesn't mean much; it must be paired with a matching row in `members`/`coaches`/`staff` to actually function in that role.
 
-INSERT INTO \`courts\` (\`court\_id\`, \`court\_name\`, \`court\_type\`, \`status\`, \`is\_active\`, \`created\_at\`) VALUES  
-(1, 'Court 1', 'Clay', 'available', 1, '2026-04-17 14:40:23'),  
-(2, 'Court 2', 'Clay', 'available', 1, '2026-04-17 14:40:23'),  
-(3, 'Court 3', 'Clay', 'available', 1, '2026-04-17 14:40:23'),  
-(4, 'Court 4', 'Clay', 'available', 1, '2026-04-17 14:40:23');
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | `int` PK | |
+| `username` | `varchar(50)` | unique |
+| `password_hash` | `varchar(255)` | bcrypt |
+| `role` | `enum('admin','member','coach')` | default `member` |
+| `status` | `enum('active','pending','disabled')` | **login** status — separate from the profile-standing enums below |
+| `created_at` | `timestamp` | |
 
-\-- \=========================================================================  
-\-- MODULE 3: PROFILE REGISTRY (ACTORS)  
-\-- \=========================================================================
+### `members`
+| Column | Type | Notes |
+|---|---|---|
+| `member_id` | `int` PK | |
+| `user_id` | `int` | unique, FK → `users`, `ON DELETE CASCADE` |
+| `full_name`, `email`, `phone` | | `email` unique |
+| `status` | `enum('active','inactive','suspended')` | **membership standing** — not the login status |
+| `created_at` | `timestamp` | |
 
-CREATE TABLE \`members\` (  
-  \`member\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`user\_id\` INT(11) NOT NULL,  
-  \`full\_name\` VARCHAR(255) NOT NULL,  
-  \`email\` VARCHAR(255) NOT NULL,  
-  \`phone\` VARCHAR(20) NOT NULL,  
-  \`status\` ENUM('active', 'inactive', 'suspended') DEFAULT 'active',  
-  \`created\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  PRIMARY KEY (\`member\_id\`),  
-  UNIQUE KEY \`user\_id\` (\`user\_id\`),  
-  UNIQUE KEY \`email\` (\`email\`),  
-  CONSTRAINT \`fk\_member\_user\` FOREIGN KEY (\`user\_id\`) REFERENCES \`users\` (\`user\_id\`) ON DELETE CASCADE  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+### `coaches`
+| Column | Type | Notes |
+|---|---|---|
+| `coach_id` | `int` PK | |
+| `user_id` | `int` | unique, FK → `users`, `ON DELETE CASCADE` |
+| `full_name`, `email`, `phone` | | `email` unique |
+| `specialization` | `varchar(100)` | nullable |
+| `experience_years` | `int` | default `0` |
+| `status` | `enum('active','inactive','on-leave')` | ⚠️ a **different** enum than `members.status` — no `'suspended'` here, `'on-leave'` instead |
+| `photo_url` | `varchar(255)` | public home-page profile photo |
+| `created_at` | `timestamp` | |
 
-INSERT INTO \`members\` (\`member\_id\`, \`user\_id\`, \`full\_name\`, \`email\`, \`phone\`, \`status\`, \`created\_at\`) VALUES  
-(9, 23, 'Jane Doe', 'jane.doe@example.com', '0760000001', 'active', '2026-05-01 10:09:05'),  
-(10, 24, 'John Smith', 'john.smith@example.com', '0760000002', 'active', '2026-05-29 12:45:40');
+### `staff`
+HR-style directory for people who aren't members or coaches. Admins get a linked login (`user_id` set); guards/other staff typically don't (`user_id` stays `NULL` — pure record, no account).
 
-CREATE TABLE \`coaches\` (  
-  \`coach\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`user\_id\` INT(11) NOT NULL,  
-  \`full\_name\` VARCHAR(100) NOT NULL,  
-  \`email\` VARCHAR(100) NOT NULL,  
-  \`phone\` VARCHAR(20) NOT NULL,  
-  \`specialization\` VARCHAR(100) DEFAULT NULL,  
-  \`experience\_years\` INT(11) DEFAULT 0,  
-  \`status\` ENUM('active', 'inactive', 'on-leave') DEFAULT 'active',  
-  \`created\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  PRIMARY KEY (\`coach\_id\`),  
-  UNIQUE KEY \`user\_id\` (\`user\_id\`),  
-  UNIQUE KEY \`email\` (\`email\`),  
-  CONSTRAINT \`fk\_coach\_user\` FOREIGN KEY (\`user\_id\`) REFERENCES \`users\` (\`user\_id\`) ON DELETE CASCADE  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+| Column | Type | Notes |
+|---|---|---|
+| `staff_id` | `int` PK | |
+| `user_id` | `int` | nullable, **unique**, FK → `users`, `ON DELETE CASCADE` |
+| `full_name`, `email`, `phone` | | email/phone nullable (no-login staff may not need them) |
+| `staff_type` | `enum('admin','guard','other')` | default `other` |
+| `position` | `varchar(100)` | free text |
+| `status` | `enum('active','inactive','suspended')` | |
+| `is_deleted` | `tinyint(1)` | soft-delete |
+| `created_at` | `timestamp` | |
 
-INSERT INTO \`coaches\` (\`coach\_id\`, \`user\_id\`, \`full\_name\`, \`email\`, \`phone\`, \`specialization\`, \`experience\_years\`, \`status\`, \`created\_at\`) VALUES  
-(1, 3, 'Sample Coach', 'coach1@example.com', '+94770000000', 'Advanced Clay Court Tactics', 12, 'on-leave', '2026-04-19 04:23:38');
+### `guests`
+Walk-in / non-member court users. No login at all.
 
-CREATE TABLE \`guests\` (  
-  \`guest\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`full\_name\` VARCHAR(100) NOT NULL,  
-  \`phone\` VARCHAR(20) NOT NULL, \-- Dropped UNIQUE to allow repeating customers  
-  \`email\` VARCHAR(100) DEFAULT NULL, \-- Dropped UNIQUE  
-  \`created\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  PRIMARY KEY (\`guest\_id\`)  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+| Column | Type | Notes |
+|---|---|---|
+| `guest_id` | `int` PK | |
+| `full_name`, `phone` | | **not unique** — repeat guests are looked up and reused by phone at the application layer, not enforced by a DB constraint |
+| `email` | `varchar(100)` | nullable |
+| `is_deleted` | `tinyint(1)` | soft-delete (bookings reference guests, so hard-delete would break FK history) |
+| `created_at` | `timestamp` | |
 
-INSERT INTO \`guests\` (\`guest\_id\`, \`full\_name\`, \`phone\`, \`email\`, \`created\_at\`) VALUES  
-(2, 'Guest One', '0760000010', 'guest1@example.com', '2026-04-19 13:11:57'),  
-(3, 'Test Guest', '0760000011', 'test@example.com', '2026-04-19 14:44:08');
+---
 
-\-- \=========================================================================  
-\-- MODULE 4: OPERATIONS & SCHEDULING  
-\-- \=========================================================================
+## 2. Membership
 
-CREATE TABLE \`bookings\` (  
-  \`booking\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`court\_id\` INT(11) NOT NULL,  
-  \`slot\_id\` INT(11) NOT NULL,  
-  \`booking\_date\` DATE NOT NULL,  
-  \`booking\_type\` ENUM('member', 'guest', 'coach') NOT NULL,  
-  \`amount\_charged\` DECIMAL(10,2) NOT NULL DEFAULT 0.00, \-- Historical Price Snapshots  
-  \`member\_id\` INT(11) DEFAULT NULL,  
-  \`guest\_id\` INT(11) DEFAULT NULL,  
-  \`coach\_id\` INT(11) DEFAULT NULL,  
-  \`status\` ENUM('pending', 'confirmed', 'rejected', 'cancelled') DEFAULT 'pending',  
-  \`lock\_status\` ENUM('locked', 'unlocked') DEFAULT 'unlocked',  
-  \`created\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  \`created\_by\_user\_id\` INT(11) NOT NULL,  
-  PRIMARY KEY (\`booking\_id\`),  
-  KEY \`court\_id\` (\`court\_id\`),  
-  KEY \`slot\_id\` (\`slot\_id\`),  
-  KEY \`created\_by\_user\_id\` (\`created\_by\_user\_id\`),  
-  KEY \`member\_id\` (\`member\_id\`),  
-  KEY \`guest\_id\` (\`guest\_id\`),  
-  KEY \`coach\_id\` (\`coach\_id\`),  
-    
-  \-- Core Hardware Guard: Blocks double booking overlaps completely  
-  UNIQUE KEY \`unique\_court\_slot\` (\`court\_id\`, \`booking\_date\`, \`slot\_id\`),  
-    
-  CONSTRAINT \`fk\_booking\_court\` FOREIGN KEY (\`court\_id\`) REFERENCES \`courts\` (\`court\_id\`),  
-  CONSTRAINT \`fk\_booking\_slot\` FOREIGN KEY (\`slot\_id\`) REFERENCES \`time\_slots\` (\`slot\_id\`),  
-  CONSTRAINT \`fk\_booking\_member\` FOREIGN KEY (\`member\_id\`) REFERENCES \`members\` (\`member\_id\`),  
-  CONSTRAINT \`fk\_booking\_guest\` FOREIGN KEY (\`guest\_id\`) REFERENCES \`guests\` (\`guest\_id\`),  
-  CONSTRAINT \`fk\_booking\_coach\` FOREIGN KEY (\`coach\_id\`) REFERENCES \`coaches\` (\`coach\_id\`) ON DELETE SET NULL,  
-  CONSTRAINT \`fk\_booking\_creator\` FOREIGN KEY (\`created\_by\_user\_id\`) REFERENCES \`users\` (\`user\_id\`)  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+### `membership_types`
+The admin-editable plan catalog (e.g. Junior/Senior).
 
-CREATE TABLE \`booking\_participants\` (  
-  \`participant\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`booking\_id\` INT(11) NOT NULL,  
-  \`member\_id\` INT(11) DEFAULT NULL,  
-  \`guest\_id\` INT(11) DEFAULT NULL,  
-  PRIMARY KEY (\`participant\_id\`),  
-  KEY \`booking\_id\` (\`booking\_id\`),  
-  KEY \`member\_id\` (\`member\_id\`),  
-  KEY \`guest\_id\` (\`guest\_id\`),  
-  CONSTRAINT \`fk\_part\_booking\` FOREIGN KEY (\`booking\_id\`) REFERENCES \`bookings\` (\`booking\_id\`) ON DELETE CASCADE,  
-  CONSTRAINT \`fk\_part\_member\` FOREIGN KEY (\`member\_id\`) REFERENCES \`members\` (\`member\_id\`) ON DELETE CASCADE,  
-  CONSTRAINT \`fk\_part\_guest\` FOREIGN KEY (\`guest\_id\`) REFERENCES \`guests\` (\`guest\_id\`) ON DELETE CASCADE  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+| Column | Type | Notes |
+|---|---|---|
+| `membership_type_id` | `int` PK | |
+| `name` | `varchar(100)` | |
+| `duration_months` | `int` | |
+| `price` | `decimal(10,2)` | |
+| `created_at` | `timestamp` | |
 
-CREATE TABLE \`memberships\` (  
-  \`membership\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`member\_id\` INT(11) NOT NULL,  
-  \`membership\_type\_id\` INT(11) NOT NULL,  
-  \`purchase\_price\` DECIMAL(10,2) NOT NULL DEFAULT 0.00, \-- Historical accounting snapshot  
-  \`start\_date\` DATE NOT NULL,  
-  \`end\_date\` DATE NOT NULL,  
-  \`status\` ENUM('active', 'expired') DEFAULT 'active',  
-  PRIMARY KEY (\`membership\_id\`),  
-  KEY \`membership\_type\_id\` (\`membership\_type\_id\`),  
-  KEY \`member\_id\` (\`member\_id\`),  
-  CONSTRAINT \`fk\_mem\_member\` FOREIGN KEY (\`member\_id\`) REFERENCES \`members\` (\`member\_id\`) ON DELETE CASCADE,  
-  CONSTRAINT \`fk\_mem\_type\` FOREIGN KEY (\`membership\_type\_id\`) REFERENCES \`membership\_types\` (\`membership\_type\_id\`)  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+### `memberships`
+A specific member's purchased term. A member can have several rows over time (renewal history); "current" means the most recent by `start_date`/`membership_id`.
 
-CREATE TABLE \`attendance\` (  
-  \`attendance\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`member\_id\` INT(11) DEFAULT NULL,  
-  \`coach\_id\` INT(11) DEFAULT NULL,  
-  \`checkin\_time\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  \`checkout\_time\` TIMESTAMP NULL DEFAULT NULL,  
-  PRIMARY KEY (\`attendance\_id\`),  
-  KEY \`member\_id\` (\`member\_id\`),  
-  KEY \`coach\_id\` (\`coach\_id\`),  
-  CONSTRAINT \`fk\_att\_member\` FOREIGN KEY (\`member\_id\`) REFERENCES \`members\` (\`member\_id\`) ON DELETE CASCADE,  
-  CONSTRAINT \`fk\_att\_coach\` FOREIGN KEY (\`coach\_id\`) REFERENCES \`coaches\` (\`coach\_id\`) ON DELETE CASCADE  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+| Column | Type | Notes |
+|---|---|---|
+| `membership_id` | `int` PK | |
+| `member_id` | `int` | FK → `members`, `ON DELETE CASCADE` |
+| `membership_type_id` | `int` | FK → `membership_types` |
+| `purchase_price` | `decimal(10,2)` | snapshot of the price paid — doesn't move if the plan's list price changes later |
+| `start_date`, `end_date` | `date` | |
+| `status` | `enum('active','expired')` | |
 
-\-- \=========================================================================  
-\-- MODULE 5: WORKFLOW PIPELINES & REVENUE LEDGERS  
-\-- \=========================================================================
+---
 
-CREATE TABLE \`registration\_requests\` (  
-  \`request\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`full\_name\` VARCHAR(100) NOT NULL,  
-  \`email\` VARCHAR(100) NOT NULL,  
-  \`phone\` VARCHAR(20) NOT NULL,  
-  \`username\` VARCHAR(50) NOT NULL,  
-  \`password\_hash\` VARCHAR(255) NOT NULL,  
-  \`status\` ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',  
-  \`submitted\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  \`reviewed\_by\` INT(11) DEFAULT NULL,  
-  \`reviewed\_at\` TIMESTAMP NULL DEFAULT NULL,  
-  \`membership\_type\_id\` INT(11) DEFAULT NULL,  
-  PRIMARY KEY (\`request\_id\`),  
-  UNIQUE KEY \`email\` (\`email\`),  
-  UNIQUE KEY \`username\` (\`username\`),  
-  KEY \`reviewed\_by\` (\`reviewed\_by\`),  
-  KEY \`membership\_type\_id\` (\`membership\_type\_id\`),  
-  CONSTRAINT \`fk\_reg\_type\` FOREIGN KEY (\`membership\_type\_id\`) REFERENCES \`membership\_types\` (\`membership\_type\_id\`),  
-  CONSTRAINT \`fk\_reg\_reviewer\` FOREIGN KEY (\`reviewed\_by\`) REFERENCES \`users\` (\`user\_id\`) ON DELETE SET NULL  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+## 3. Courts & scheduling
 
-\-- Sample registration data rows (sanitized placeholder data)  
-INSERT INTO \`registration\_requests\` (\`request\_id\`, \`full\_name\`, \`email\`, \`phone\`, \`username\`, \`password\_hash\`, \`status\`, \`submitted\_at\`, \`reviewed\_by\`, \`reviewed\_at\`, \`membership\_type\_id\`) VALUES  
-(1, 'Sample Applicant 1', 'applicant1@example.com', '0760000020', 'applicant1', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'approved', '2026-04-17 09:15:51', NULL, NULL, NULL),  
-(2, 'Test Member', 'test@example.com', '0760000021', 'tester01', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'rejected', '2026-04-17 09:24:55', NULL, NULL, NULL),  
-(4, 'Sample Applicant 2', 'applicant2@example.com', '0760000022', 'applicant2', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'approved', '2026-04-17 09:41:55', NULL, NULL, NULL),  
-(6, 'Sample Applicant 3', 'applicant3@example.com', '0760000023', 'applicant3', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'approved', '2026-04-17 10:01:43', NULL, NULL, NULL),  
-(7, 'Sample Applicant 4', 'applicant4@example.com', '0760000024', 'applicant4', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'approved', '2026-04-17 11:19:54', NULL, NULL, NULL),  
-(9, 'Sample Applicant 5', 'applicant5@example.com', '0760000025', 'applicant5', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'approved', '2026-04-17 12:57:11', NULL, NULL, NULL),  
-(12, 'Sample Applicant 6', 'applicant6@example.com', '0760000026', 'applicant6', '$2b$10$placeholderHashDoNotUseXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', 'approved', '2026-04-19 14:24:15', NULL, '2026-04-19 14:53:22', NULL);
+### `courts`
+| Column | Type | Notes |
+|---|---|---|
+| `court_id` | `int` PK | |
+| `court_name` | `varchar(50)` | unique |
+| `court_type` | `varchar(30)` | default `Clay` |
+| `status` | `enum('available','maintenance')` | |
+| `is_active` | `tinyint(1)` | default `1` |
+| `photo_url` | `varchar(255)` | public court-gallery photo |
+| `created_at` | `timestamp` | |
 
-CREATE TABLE \`payment\_verification\` (  
-  \`verification\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`request\_id\` INT(11) DEFAULT NULL,  
-  \`booking\_id\` INT(11) DEFAULT NULL,  
-  \`payment\_type\` ENUM('registration', 'booking', 'membership\_renewal', 'other') NOT NULL DEFAULT 'registration',  
-  \`receipt\_file\_url\` VARCHAR(255) NOT NULL,  
-  \`amount\_declared\` DECIMAL(10,2) DEFAULT 0.00,  
-  \`status\` ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',  
-  \`submitted\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  \`reviewed\_by\` INT(11) DEFAULT NULL,  
-  \`reviewed\_at\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP() ON UPDATE CURRENT\_TIMESTAMP(),  
-  \`remarks\` TEXT DEFAULT NULL,  
-  PRIMARY KEY (\`verification\_id\`),  
-  UNIQUE KEY \`request\_id\` (\`request\_id\`), \-- Retained unique: one request, one verification loop  
-  KEY \`booking\_id\` (\`booking\_id\`),         \-- Dropped unique constraint to allow multi-upload retries for rejected runs  
-  KEY \`reviewed\_by\` (\`reviewed\_by\`),  
-  CONSTRAINT \`fk\_ver\_request\` FOREIGN KEY (\`request\_id\`) REFERENCES \`registration\_requests\` (\`request\_id\`) ON DELETE CASCADE,  
-  CONSTRAINT \`fk\_ver\_reviewer\` FOREIGN KEY (\`reviewed\_by\`) REFERENCES \`users\` (\`user\_id\`) ON DELETE SET NULL  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+### `time_slots`
+Fixed daily 1-hour blocks (currently 16, 06:00–22:00), shared by every court.
 
-\-- Seed historical registration verification lines  
-INSERT INTO \`payment\_verification\` (\`verification\_id\`, \`request\_id\`, \`booking\_id\`, \`payment\_type\`, \`receipt\_file\_url\`, \`amount\_declared\`, \`status\`, \`submitted\_at\`, \`reviewed\_by\`, \`reviewed\_at\`, \`remarks\`) VALUES  
-(1, 6, NULL, 'registration', 'uploads\\\\slips\\\\sample-receipt-1.png', 0.00, 'approved', '2026-04-17 10:01:43', NULL, '2026-04-19 12:20:17', NULL),  
-(2, 7, NULL, 'registration', 'uploads\\\\slips\\\\sample-receipt-2.png', 0.00, 'approved', '2026-04-17 11:19:54', NULL, '2026-04-19 14:25:12', NULL),  
-(3, 12, NULL, 'registration', 'uploads\\\\slips\\\\sample-receipt-3.png', 0.00, 'approved', '2026-04-19 14:24:15', NULL, '2026-04-19 14:53:22', NULL);
+| Column | Type | Notes |
+|---|---|---|
+| `slot_id` | `int` PK | |
+| `slot_name` | `varchar(50)` | e.g. `Slot 03 (08:00 - 09:00)` |
+| `start_time`, `end_time` | `time` | |
 
-CREATE TABLE \`payments\` (  
-  \`payment\_id\` INT(11) NOT NULL AUTO\_INCREMENT,  
-  \`amount\` DECIMAL(10,2) NOT NULL,  
-  \`payment\_date\` TIMESTAMP NOT NULL DEFAULT CURRENT\_TIMESTAMP(),  
-  \`payment\_type\` ENUM('membership', 'booking\_fee', 'coach\_registration', 'other') NOT NULL,  
-  \`member\_id\` INT(11) DEFAULT NULL,  
-  \`coach\_id\` INT(11) DEFAULT NULL, \-- Added for admin-recorded coach registration payments (manualPaymentController)  
-  \`booking\_id\` INT(11) DEFAULT NULL,  
-  \`verification\_id\` INT(11) DEFAULT NULL, \-- Links back to the payment\_verification row that created this ledger entry (added for the registration-approval edit/undo workflow)  
-  \`handled\_by\` INT(11) NOT NULL, \-- Admin tracking compliance metric  
-  \`status\` ENUM('completed', 'recorded', 'failed', 'refunded') DEFAULT 'completed',  
-  \`notes\` VARCHAR(255) DEFAULT NULL, \-- Free-text note for manually-recorded payments (e.g. "Paid via cash at front desk")  
-  PRIMARY KEY (\`payment\_id\`),  
-  KEY \`handled\_by\` (\`handled\_by\`),  
-  KEY \`member\_id\` (\`member\_id\`),  
-  KEY \`coach\_id\` (\`coach\_id\`),  
-  KEY \`booking\_id\` (\`booking\_id\`),  
-  KEY \`verification\_id\` (\`verification\_id\`),  
-  CONSTRAINT \`fk\_pay\_admin\` FOREIGN KEY (\`handled\_by\`) REFERENCES \`users\` (\`user\_id\`),  
-  CONSTRAINT \`fk\_pay\_member\` FOREIGN KEY (\`member\_id\`) REFERENCES \`members\` (\`member\_id\`) ON DELETE SET NULL,  
-  CONSTRAINT \`fk\_pay\_coach\` FOREIGN KEY (\`coach\_id\`) REFERENCES \`coaches\` (\`coach\_id\`) ON DELETE SET NULL,  
-  CONSTRAINT \`fk\_pay\_booking\` FOREIGN KEY (\`booking\_id\`) REFERENCES \`bookings\` (\`booking\_id\`) ON DELETE SET NULL,  
-  CONSTRAINT \`fk\_pay\_verification\` FOREIGN KEY (\`verification\_id\`) REFERENCES \`payment\_verification\` (\`verification\_id\`) ON DELETE SET NULL  
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4\_general\_ci;
+### `bookings`
+The busiest table in the schema — every court reservation, from every surface (guest/member/coach/admin), lands here.
 
-\-- Consolidated payment references (table name altered to matching plural form 'payments')  
-INSERT INTO \`payments\` (\`payment\_id\`, \`amount\`, \`payment\_date\`, \`payment\_type\`, \`member\_id\`, \`booking\_id\`, \`handled\_by\`, \`status\`) VALUES  
-(1, 5000.00, '2026-04-17 10:39:56', 'membership', NULL, NULL, 19, 'completed'),  
-(2, 5000.00, '2026-04-19 14:25:12', 'membership', NULL, NULL, 19, 'completed'),  
-(3, 0.00, '2026-04-19 14:53:22', 'membership', NULL, NULL, 19, 'completed'),  
-(4, 5000.00, '2026-04-26 04:54:37', 'membership', NULL, NULL, 19, 'completed'),  
-(5, 5000.00, '2026-05-29 12:45:40', 'membership', 10, NULL, 19, 'completed');
+| Column | Type | Notes |
+|---|---|---|
+| `booking_id` | `int` PK | |
+| `court_id` | `int` | FK → `courts` |
+| `slot_id` | `int` | FK → `time_slots` |
+| `booking_date` | `date` | |
+| `booking_type` | `enum('member','guest','coach')` | |
+| `amount_charged` | `decimal(10,2)` | historical price snapshot; `0` for member/coach bookings (covered by membership), non-zero for guest fees |
+| `member_id` / `guest_id` / `coach_id` | `int` | nullable, exactly one set per row |
+| `status` | `enum('pending','confirmed','rejected','cancelled')` | `pending` = an unpaid guest hold (5-min window) |
+| `lock_status` | `enum('locked','unlocked')` | admin-only flag — a `locked` booking can't be self-cancelled by the member/coach who made it |
+| `lock_expires_at` | `datetime` | nullable — when a guest's payment hold expires; `NULL` once paid/confirmed |
+| `active_slot_key` | `varchar(40)`, **generated (virtual)** | `court_id-booking_date-slot_id` **only while `status` is `pending`/`confirmed`**, else `NULL` |
+| `lock_token` | `varchar(64)` | nullable — a random secret handed to whoever creates a guest hold, required back before a receipt can be submitted against it |
+| `created_by_user_id` | `int` | FK → `users` |
+| `created_at` | `timestamp` | |
 
-\-- \=========================================================================  
-\-- INITIAL SEED DATA  
-\-- \=========================================================================
+**Keys worth knowing:**
+- `UNIQUE KEY unique_active_court_slot (active_slot_key)` — this is the real "can't double-book a slot" guarantee. Because `active_slot_key` is `NULL` for any cancelled/rejected booking, MySQL never treats two `NULL`s as a duplicate — so a freed-up slot can be booked again by someone else *without reusing the old row*. (An earlier version of this schema used a plain `UNIQUE(court_id, booking_date, slot_id)` with no status awareness, which caused cancelled bookings' rows to get silently overwritten by the next person's booking — corrupting whichever payments were already recorded against the original. Fixed; this generated-column approach is the fix.)
+- `KEY idx_court_date_slot` — a plain (non-unique) index kept alongside, purely so `SELECT ... FOR UPDATE` lookups on a court/date/slot stay fast and properly row-locked regardless of status.
 
-\-- Seed the 16 fixed operational 1-hour club blocks (06:00 AM to 10:00 PM)  
-INSERT INTO \`time\_slots\` (\`slot\_name\`, \`start\_time\`, \`end\_time\`) VALUES  
-('Slot 01 (06:00 \- 07:00)', '06:00:00', '07:00:00'),  
-('Slot 02 (07:00 \- 08:00)', '07:00:00', '08:00:00'),  
-('Slot 03 (08:00 \- 09:00)', '08:00:00', '09:00:00'),  
-('Slot 04 (09:00 \- 10:00)', '09:00:00', '10:00:00'),  
-('Slot 05 (10:00 \- 11:00)', '10:00:00', '11:00:00'),  
-('Slot 06 (11:00 \- 12:00)', '11:00:00', '12:00:00'),  
-('Slot 07 (12:00 \- 13:00)', '12:00:00', '13:00:00'),  
-('Slot 08 (13:00 \- 14:00)', '13:00:00', '14:00:00'),  
-('Slot 09 (14:00 \- 15:00)', '14:00:00', '15:00:00'),  
-('Slot 10 (15:00 \- 16:00)', '15:00:00', '16:00:00'),  
-('Slot 11 (16:00 \- 17:00)', '16:00:00', '17:00:00'),  
-('Slot 12 (17:00 \- 18:00)', '17:00:00', '18:00:00'),  
-('Slot 13 (18:00 \- 19:00)', '18:00:00', '19:00:00'),  
-('Slot 14 (19:00 \- 20:00)', '19:00:00', '20:00:00'),  
-('Slot 15 (20:00 \- 21:00)', '20:00:00', '21:00:00'),  
-('Slot 16 (21:00 \- 22:00)', '21:00:00', '22:00:00');
+### `attendance`
+Check-in/check-out log, tied back to the specific booking it's for.
 
-\-- Injecting the historical booking linked with our new standardized Time Slots mapping (08:00 to 09:00 maps to Slot 03\)  
-INSERT INTO \`bookings\` (\`booking\_id\`, \`court\_id\`, \`slot\_id\`, \`booking\_date\`, \`booking\_type\`, \`amount\_charged\`, \`member\_id\`, \`guest\_id\`, \`coach\_id\`, \`status\`, \`lock\_status\`, \`created\_at\`, \`created\_by\_user\_id\`) VALUES  
-(3, 1, 3, '2026-04-20', 'guest', 1500.00, NULL, 3, NULL, 'pending', 'unlocked', '2026-04-19 14:49:48', 19);
+| Column | Type | Notes |
+|---|---|---|
+| `attendance_id` | `int` PK | |
+| `booking_id` | `int` | nullable, FK → `bookings`, `ON DELETE SET NULL` |
+| `member_id` / `coach_id` | `int` | nullable — whichever attended |
+| `checkin_time` | `timestamp` | |
+| `checkout_time` | `timestamp` | nullable — `NULL` while still "on court" |
 
-INSERT INTO \`payment\_verification\` (\`verification\_id\`, \`request\_id\`, \`booking\_id\`, \`payment\_type\`, \`receipt\_file\_url\`, \`amount\_declared\`, \`status\`, \`submitted\_at\`, \`reviewed\_by\`, \`reviewed\_at\`, \`remarks\`) VALUES  
-(4, NULL, 3, 'booking', '/uploads/receipts/sample-receipt-4.png', 1500.00, 'pending', '2026-04-19 14:51:46', NULL, '2026-04-19 14:51:46', NULL);
+Guests are deliberately excluded from this table — there's no `guest_id` column, since there's no account to charge a no-show fee to.
 
-COMMIT;  
+---
+
+## 4. Money
+
+### `payment_verification`
+The pending-review queue: every receipt a member/coach/guest/applicant uploads lands here first, before an admin approves or rejects it. One row can represent very different things depending on which of `request_id` / `booking_id` / `settles_payment_id` is set.
+
+| Column | Type | Notes |
+|---|---|---|
+| `verification_id` | `int` PK | |
+| `request_id` | `int` | nullable, **unique**, FK → `registration_requests` — set only for a new-member application |
+| `booking_id` | `int` | nullable, FK-less* — set only for a guest's court-booking payment |
+| `member_id` / `coach_id` | `int` | nullable, FK → respective table — set for a self-service submission (renewal, donation, fee settlement) |
+| `membership_type_id` | `int` | nullable, FK → `membership_types` — the plan being renewed |
+| `settles_payment_id` | `int` | nullable, FK → `payments` — set when this receipt is meant to pay off a specific already-recorded fee (e.g. a cancellation/no-show charge), rather than create a new one |
+| `payment_type` | `enum('registration','booking','membership_renewal','donation','tournament_fee','cancellation_fee','no_show_fee','other')` | |
+| `receipt_file_url` | `varchar(255)` | path under `/uploads/slips/` |
+| `amount_declared` | `decimal(10,2)` | what the submitter claims they paid |
+| `status` | `enum('pending','approved','rejected')` | |
+| `submitted_at`, `reviewed_by`, `reviewed_at` | | |
+| `remarks` | `text` | admin's review note |
+| `note` | `varchar(255)` | submitter's own note (e.g. "paid via bank transfer") |
+
+<sub>*`booking_id` has no FK constraint — deliberately, so a booking row further along the reuse lifecycle can't block deleting/altering this table's history.</sub>
+
+### `payments`
+The actual ledger — money that's been charged, waived, or is outstanding. This is what revenue reports query.
+
+| Column | Type | Notes |
+|---|---|---|
+| `payment_id` | `int` PK | |
+| `amount` | `decimal(10,2)` | |
+| `payment_date` | `timestamp` | |
+| `payment_type` | `enum('membership','booking_fee','coach_registration','other','cancellation_fee','donation','tournament_fee','no_show_fee')` | |
+| `member_id` / `coach_id` | `int` | nullable, `ON DELETE SET NULL` |
+| `booking_id` | `int` | nullable, FK → `bookings`, `ON DELETE SET NULL` |
+| `membership_id` | `int` | nullable, FK → `memberships`, `ON DELETE SET NULL` — links a payment to the exact term it paid for, so a later plan correction updates this row instead of inserting a duplicate |
+| `verification_id` | `int` | nullable, FK → `payment_verification`, `ON DELETE SET NULL` — links back to the receipt that created/settled this entry, if any |
+| `handled_by` | `int` **NOT NULL** | FK → `users` — which admin account is responsible (a real admin for manual entries, the oldest active admin for automated charges like no-show fees) |
+| `status` | `enum('completed','recorded','failed','refunded','waived')` | `recorded` = charged but not yet paid (an outstanding fee); `completed` = paid; `waived` = forgiven |
+| `notes` | `varchar(255)` | free text |
+
+---
+
+## 5. Registration pipeline
+
+### `registration_requests`
+A prospective member's public sign-up application, before any account exists.
+
+| Column | Type | Notes |
+|---|---|---|
+| `request_id` | `int` PK | |
+| `full_name`, `email` (unique), `phone` | | |
+| `username` (unique), `password_hash` | | pre-hashed at submission — the real account is created verbatim from these on approval |
+| `status` | `enum('pending','approved','rejected')` | |
+| `submitted_at`, `reviewed_by`, `reviewed_at` | | |
+| `membership_type_id` | `int` | nullable, FK → `membership_types` — plan requested |
+| `created_user_id` | `int` | nullable, FK → `users`, `ON DELETE SET NULL` — set once, at approval, so a later "undo approval" can find and remove the exact account it created even if that account's `username` gets changed afterward |
+
+---
+
+## 6. Public-site content
+
+### `contact_inquiries`
+Submissions from the public contact form.
+
+| Column | Type | Notes |
+|---|---|---|
+| `inquiry_id` | `int` PK | |
+| `full_name`, `email`, `phone` | | phone nullable |
+| `message` | `text` | |
+| `status` | `enum('unread','read','replied')` | |
+| `reply_message`, `replied_at` | | set when an admin replies (sends a real email via `nodemailer`) |
+| `is_deleted` | `tinyint(1)` | soft-delete |
+| `created_at` | `datetime` | |
+
+### `announcements`
+Admin-published news shown on the public Updates page.
+
+| Column | Type | Notes |
+|---|---|---|
+| `announcement_id` | `int` PK | |
+| `title`, `content` | | |
+| `category` | `varchar(100)` | default `GENERAL` |
+| `publish_at` | `datetime` | nullable — supports scheduling a post for the future |
+| `is_deleted` | `tinyint(1)` | soft-delete |
+| `created_at`, `updated_at` | | |
+
+---
+
+## 7. Configuration
+
+### `club_settings`
+A generic key/value store — deliberately schema-less so new settings never need a migration.
+
+| Column | Type | Notes |
+|---|---|---|
+| `setting_key` | `varchar(50)` PK | |
+| `setting_value` | `varchar(255)` | always stored as a string, parsed by whichever code reads it |
+| `updated_at` | `timestamp` | |
+
+Keys currently in use: `cancellation_fee`, `guest_booking_fee`, `no_show_fee` (numeric, validated), `bank_name`, `account_name`, `account_number`, `branch`, `payment_instructions` (bank-transfer details shown to payers), and `club_address`, `club_email`, `club_phone`, `club_opening_hours`, `club_facebook_url`, `club_instagram_url`, `club_twitter_url` (public contact info, editable from the admin Club Settings page).
+
+---
+
+## 8. Entity relationship summary
+
+```
+users ──┬── members ──── memberships ──── membership_types
+        ├── coaches                             │
+        └── staff                               │
+                                                 │
+courts ──┐                                      │
+time_slots ┴── bookings ──┬── attendance         │
+                           │                     │
+guests ────────────────────┘                     │
+                                                  │
+registration_requests ── payment_verification ── payments
+                                   │                 │
+                    (settles_payment_id ────────────┘  — a receipt paying off
+                     an existing outstanding fee)
+
+contact_inquiries, announcements, club_settings — standalone, no FKs in/out
+```
+
+**Not a real table:** an earlier design considered a `booking_participants` join table (for bookings with more than one attendee) — it was never actually created in the live database. `attendance` handles multi-person sessions today by allowing multiple rows against the same `booking_id`.
