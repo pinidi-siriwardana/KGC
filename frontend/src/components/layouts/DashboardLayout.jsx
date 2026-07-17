@@ -50,6 +50,12 @@ const SidebarContent = ({ role, closeMobileMenu }) => {
           { name: 'Profile Settings', icon: UserCog, path: '/admin/profile' },
         ]
       },
+      {
+        group: "Tools", items: [
+          { name: 'Weather Forecast', icon: CloudSun, path: '/admin/weather' },
+          { name: 'BMI & Calories', icon: Activity, path: '/admin/fitness' },
+        ]
+      },
 
     ],
     member: [

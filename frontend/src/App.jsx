@@ -97,6 +97,8 @@ const MainContent = () => {
               <Route path="/admin/bookings" element={<AdminBookings />} />
               <Route path="/admin/schedule" element={<AdminBookings />} />
               <Route path="/admin/attendance" element={<AdminAttendance />} />
+              <Route path="/admin/weather" element={<WeatherForecast />} />
+              <Route path="/admin/fitness" element={<FitnessCalculator />} />
             </Route>
           </Route>
 
