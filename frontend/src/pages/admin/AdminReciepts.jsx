@@ -34,22 +34,28 @@ const ReceiptReview = () => {
         });
     }, [history, search, statusFilter]);
 
+    // getPendingVerifications/getVerificationHistory return a bare array on
+    // success but `{message, error}` on a 500 — without checking res.ok/
+    // Array.isArray, a transient backend error would set slips/history to
+    // that error object, and the very next render's .map()/.filter() would
+    // crash the whole page (same guard AdminGuests.jsx already uses).
     const fetchSlips = async () => {
         const res = await apiFetch('/api/payments/pending');
         const data = await res.json();
-        setSlips(data);
+        setSlips(res.ok && Array.isArray(data) ? data : []);
         setLoading(false);
     };
 
     const fetchHistory = async () => {
         const res = await apiFetch('/api/payments/history');
         const data = await res.json();
-        setHistory(data);
+        setHistory(res.ok && Array.isArray(data) ? data : []);
     };
 
     useEffect(() => {
-        apiFetch('/api/payments/pending').then((res) => res.json()).then((data) => { setSlips(data); setLoading(false); });
-        apiFetch('/api/payments/history').then((res) => res.json()).then((data) => setHistory(data));
+        fetchSlips();
+        fetchHistory();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleApproval = async (id, status) => {

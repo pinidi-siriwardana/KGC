@@ -4,6 +4,14 @@ const pool = require('../config/db');
 const { withTransaction } = pool;
 const { hashPassword, comparePassword } = require('../utils/password');
 
+// A fixed, pre-computed bcrypt hash with no real matching password — used to
+// keep login's response time the same whether or not `username` exists.
+// bcrypt.compare is a deliberately slow (~50-100ms) operation that only ran
+// when a matching user was found, so an attacker could tell "no such
+// username" apart from "wrong password" purely from response latency, even
+// though both returned the exact same error text.
+const DUMMY_HASH = '$2b$10$nJl3JLR3V22WHIRd2amco.kePXXWR0Wk812iR4wdMka0m3zXzsWLO';
+
 const register = async (req, res) => {
     const { full_name, email, phone, username, password, membership_type_id } = req.body;
     const receiptFile = req.file;
@@ -64,15 +72,13 @@ const login = async (req, res) => {
 
     try {
         const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
-
-        if (rows.length === 0) {
-            return res.status(401).json({ message: 'Invalid username or password.' });
-        }
-
         const user = rows[0];
-        const isMatch = await comparePassword(password, user.password_hash);
 
-        if (!isMatch) {
+        // Always compare against something, even for a nonexistent
+        // username, so this branch takes the same time either way.
+        const isMatch = await comparePassword(password, user ? user.password_hash : DUMMY_HASH);
+
+        if (!user || !isMatch) {
             return res.status(401).json({ message: 'Invalid username or password.' });
         }
 

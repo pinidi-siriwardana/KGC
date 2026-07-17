@@ -102,9 +102,12 @@ const AdminInquiries = () => {
             if (res.ok) {
                 setInquiries(prev => prev.filter(i => i.inquiry_id !== id));
                 if (selected?.inquiry_id === id) setSelected(null);
+            } else {
+                const err = await res.json();
+                alert(err.message || 'Failed to delete inquiry.');
             }
         } catch (err) {
-            console.error('Delete failed', err);
+            alert('Network error. Could not delete inquiry.');
         }
     };
 

@@ -74,7 +74,10 @@ const replyToInquiry = async (req, res) => {
 
     try {
         await ensureTable();
-        const [[inquiry]] = await pool.query('SELECT * FROM contact_inquiries WHERE inquiry_id = ?', [id]);
+        // Same is_deleted guard getInquiries/getInquiry already use — an
+        // inquiry soft-deleted from another tab while this one's reply form
+        // is still open shouldn't still be replyable.
+        const [[inquiry]] = await pool.query('SELECT * FROM contact_inquiries WHERE inquiry_id = ? AND is_deleted = 0', [id]);
         if (!inquiry) return res.status(404).json({ message: 'Inquiry not found.' });
 
         const transporter = nodemailer.createTransport({

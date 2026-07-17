@@ -102,7 +102,12 @@ const AdminAnnouncements = () => {
     const handleDelete = async (id) => {
         if (!window.confirm('Remove this announcement from the public page? It will be kept in the database.')) return;
         const res = await apiFetch(`/api/announcements/${id}`, { method: 'DELETE' });
-        if (res.ok) fetchAnnouncements();
+        if (res.ok) {
+            fetchAnnouncements();
+        } else {
+            const err = await res.json();
+            alert(err.message || 'Failed to remove announcement.');
+        }
     };
 
     const filtered = announcements.filter(a => {

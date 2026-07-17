@@ -14,7 +14,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import Background from "../../assets/images/tennis-play.jpg";
-import { API_URL } from '../../utils/api';
+import { API_URL, parseErrorMessage } from '../../utils/api';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -59,10 +59,9 @@ const RegisterPage = () => {
 
     try {
       const res = await fetch(`${API_URL}/api/auth/register`, { method: 'POST', body });
-      const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || 'Registration failed.');
+        throw new Error(await parseErrorMessage(res, 'Registration failed.'));
       }
 
       setSubmitted(true);

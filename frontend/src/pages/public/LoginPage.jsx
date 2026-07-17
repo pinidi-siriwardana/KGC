@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { User, Lock, ArrowRight, ArrowLeft, ShieldCheck, Globe } from 'lucide-react';
+import { parseErrorMessage } from '../../utils/api';
 
 // Optional: Import a high-quality club interior or abstract tennis visual
 import clubVisual from "../../assets/images/club-dusk.jpg";
@@ -25,11 +26,10 @@ const LoginPage = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
             });
-            const data = await res.json();
-
             if (!res.ok) {
-                throw new Error(data.message || 'Login failed.');
+                throw new Error(await parseErrorMessage(res, 'Login failed.'));
             }
+            const data = await res.json();
 
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));

@@ -36,8 +36,11 @@ const updateGuest = async (req, res) => {
     const { full_name, phone, email } = req.body;
 
     try {
+        // Same is_deleted guard deleteGuest/restoreGuest already use — a
+        // soft-deleted guest is meant to be untouchable until restored, not
+        // silently editable via a direct request against its still-valid id.
         const [result] = await pool.query(
-            'UPDATE guests SET full_name = ?, phone = ?, email = ? WHERE guest_id = ?',
+            'UPDATE guests SET full_name = ?, phone = ?, email = ? WHERE guest_id = ? AND is_deleted = 0',
             [full_name, phone, email || null, id]
         );
 
