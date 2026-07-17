@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Settings, Hammer, CheckCircle, Activity, ShieldAlert } from 'lucide-react';
+import { Trophy, Settings, Hammer, CheckCircle, Activity, Camera, Loader2 } from 'lucide-react';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, API_URL } from '../../utils/api';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -14,6 +14,9 @@ const AdminCourts = () => {
   const [courts, setCourts] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [uploadingPhotoFor, setUploadingPhotoFor] = useState(null);
+  const [photoErrors, setPhotoErrors] = useState({});
+  const [brokenPhotos, setBrokenPhotos] = useState({});
 
   const filteredCourts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -31,6 +34,30 @@ const AdminCourts = () => {
       .then(res => setCourts(res.data))
       .catch(err => console.error("Error loading courts:", err));
   }, []);
+
+  // Uploads immediately on file select, same pattern as the coach photo
+  // upload — no add/edit form exists for courts, so this is its own
+  // dedicated action rather than part of a larger save.
+  const handlePhotoUpload = async (court_id, file) => {
+    if (!file) return;
+    setUploadingPhotoFor(court_id);
+    setPhotoErrors((e) => ({ ...e, [court_id]: '' }));
+
+    const body = new FormData();
+    body.append('photo', file);
+
+    const res = await apiFetch(`/api/courts/${court_id}/photo`, { method: 'POST', body });
+    setUploadingPhotoFor(null);
+
+    if (res.ok) {
+      const data = await res.json();
+      setCourts((cs) => cs.map((c) => (c.court_id === court_id ? { ...c, photo_url: data.photo_url } : c)));
+      setBrokenPhotos((b) => ({ ...b, [court_id]: false }));
+    } else {
+      const err = await res.json();
+      setPhotoErrors((e) => ({ ...e, [court_id]: err.message || 'Failed to upload photo.' }));
+    }
+  };
 
   // Handle status toggle (Available vs Maintenance)
   const handleStatusToggle = async (id, currentStatus) => {
@@ -82,16 +109,28 @@ const AdminCourts = () => {
                 {/* Court Name column */}
                 <td className="p-4">
                   <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-colors ${
-                      court.status === 'available' 
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
-                      : 'bg-slate-100 text-slate-400 border-slate-200'
-                    }`}>
-                      <Trophy size={18} />
-                    </div>
+                    {court.photo_url && !brokenPhotos[court.court_id] ? (
+                      <img
+                        src={`${API_URL}${court.photo_url}`}
+                        alt={court.court_name}
+                        onError={() => setBrokenPhotos((b) => ({ ...b, [court.court_id]: true }))}
+                        className="w-10 h-10 rounded-xl object-cover border border-slate-200"
+                      />
+                    ) : (
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-colors ${
+                        court.status === 'available'
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                        : 'bg-slate-100 text-slate-400 border-slate-200'
+                      }`}>
+                        <Trophy size={18} />
+                      </div>
+                    )}
                     <div>
                       <p className="text-slate-900 text-sm font-bold tracking-tight">{court.court_name}</p>
                       <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">ID: KGC-CT-{court.court_id}</p>
+                      {photoErrors[court.court_id] && (
+                        <p className="text-[9px] text-red-500 font-bold mt-0.5">{photoErrors[court.court_id]}</p>
+                      )}
                     </div>
                   </div>
                 </td>
@@ -133,9 +172,23 @@ const AdminCourts = () => {
                       {court.status === 'available' ? <Settings size={18} /> : <CheckCircle size={18} />}
                     </button>
                     
-                    <button className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-50 hover:bg-slate-900 hover:text-white rounded-xl transition-all border border-slate-100">
-                      <ShieldAlert size={18} />
-                    </button>
+                    <label
+                      title={court.photo_url ? 'Change Photo' : 'Upload Photo'}
+                      className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all border cursor-pointer ${
+                        uploadingPhotoFor === court.court_id
+                          ? 'text-slate-300 bg-slate-50 border-slate-100'
+                          : 'text-slate-400 bg-slate-50 hover:bg-slate-900 hover:text-white border-slate-100'
+                      }`}
+                    >
+                      {uploadingPhotoFor === court.court_id ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        disabled={uploadingPhotoFor === court.court_id}
+                        onChange={(e) => handlePhotoUpload(court.court_id, e.target.files[0])}
+                      />
+                    </label>
                   </div>
                 </td>
               </tr>

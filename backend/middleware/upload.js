@@ -54,4 +54,21 @@ const uploadCoachPhoto = multer({
     limits: { fileSize: 3 * 1024 * 1024 }, // 3MB — a profile photo, not a scanned document
 });
 
-module.exports = { uploadReceipt, uploadCoachPhoto, SLIPS_DIR, COACHES_DIR };
+const COURTS_DIR = path.join(__dirname, '..', 'uploads', 'courts');
+fs.mkdirSync(COURTS_DIR, { recursive: true });
+
+const courtPhotoStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, COURTS_DIR),
+    filename: (req, file, cb) => {
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        cb(null, `${Date.now()}-${safeName}`);
+    },
+});
+
+const uploadCourtPhoto = multer({
+    storage: courtPhotoStorage,
+    fileFilter: imageOnlyFilter,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB — a wider facility shot, not just a headshot
+});
+
+module.exports = { uploadReceipt, uploadCoachPhoto, uploadCourtPhoto, SLIPS_DIR, COACHES_DIR, COURTS_DIR };

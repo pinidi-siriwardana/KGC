@@ -84,12 +84,23 @@ const ensureCoachesSchema = async () => {
     }
 };
 
+// courts.photo_url: lets an admin attach a real photo per court, shown in
+// the public court gallery instead of the old hardcoded/fictional images.
+const ensureCourtsSchema = async () => {
+    try {
+        await pool.query('ALTER TABLE courts ADD COLUMN photo_url VARCHAR(255) DEFAULT NULL');
+    } catch (err) {
+        ignoreIfAlreadyApplied(err);
+    }
+};
+
 const ensureSchema = async () => {
     await ensureGuestsSchema();
     await ensurePaymentsSchema();
     await ensureStaffSchema();
     await backfillAdminStaffRecords();
     await ensureCoachesSchema();
+    await ensureCourtsSchema();
 };
 
 module.exports = { ensureSchema };

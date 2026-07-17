@@ -1,48 +1,77 @@
-import React from 'react';
-import { Crown, Sun, Wind, Trophy, MapPin } from 'lucide-react';
-import court1 from "../../assets/images/court1.jpg";
-import court2 from "../../assets/images/court2.jpg";
-import court3 from "../../assets/images/court3.jpg";
+import React, { useState, useEffect } from 'react';
+import { Trophy, MapPin, CheckCircle, Hammer } from 'lucide-react';
+import { API_URL } from '../../utils/api';
+
+const CourtCard = ({ court }) => {
+  const [imageBroken, setImageBroken] = useState(false);
+  const image = court.photo_url ? `${API_URL}${court.photo_url}` : null;
+  const isAvailable = court.status === 'available';
+
+  return (
+    <div className="group relative h-[550px] lg:h-[650px] rounded-club overflow-hidden transition-all duration-1000 bg-obsidian border border-obsidian/5 shadow-xl shadow-obsidian/5">
+      {/* Image: Ultra-slow zoom, falls back to a plain surface tile if no photo (or the file's gone) */}
+      {image && !imageBroken ? (
+        <img
+          src={image}
+          alt={court.court_name}
+          onError={() => setImageBroken(true)}
+          className="w-full h-full object-cover grayscale-[0.4] group-hover:grayscale-0 group-hover:scale-110 transition-all duration-[3s] ease-out opacity-80"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-obsidian to-obsidian/60">
+          <Trophy size={64} className="text-white/10" />
+        </div>
+      )}
+
+      {/* Gradient Overlay: Deepest at the bottom for text legibility */}
+      <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/20 to-transparent opacity-90 group-hover:opacity-70 transition-opacity duration-1000" />
+
+      {/* Live Status Badge */}
+      <div className="absolute top-8 left-8 transform group-hover:-translate-y-1 transition-transform duration-700">
+        {isAvailable ? (
+          <div className="bg-emerald text-obsidian px-5 py-2 rounded-full flex items-center gap-2 shadow-xl border border-white/20">
+            <CheckCircle size={12} />
+            <span className="text-[9px] font-black uppercase tracking-registry">Available</span>
+          </div>
+        ) : (
+          <div className="bg-amber text-obsidian px-5 py-2 rounded-full flex items-center gap-2 shadow-xl border border-white/20">
+            <Hammer size={12} />
+            <span className="text-[9px] font-black uppercase tracking-registry">Maintenance</span>
+          </div>
+        )}
+      </div>
+
+      {/* Court Details: Slide-up Animation */}
+      <div className="absolute inset-0 p-10 flex flex-col justify-end text-alabaster">
+        <div className="space-y-6 transform translate-y-6 group-hover:translate-y-0 transition-all duration-700 ease-out">
+          <div className="flex items-center gap-4">
+            <span className="text-4xl font-serif italic text-amber/80 drop-shadow-md">{String(court.court_id).padStart(2, '0')}</span>
+            <div className="h-px flex-grow bg-alabaster/20" />
+          </div>
+
+          <div>
+            <h3 className="text-2xl font-serif text-white mb-2 leading-tight tracking-tight">{court.court_name}</h3>
+            <div className="flex items-center gap-2 text-white/50">
+              <MapPin size={12} className="text-amber" />
+              <p className="text-[10px] font-bold uppercase tracking-widest">{court.court_type} Surface</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const CourtGallery = () => {
-  const courtData = [
-    {
-      id: "01",
-      name: "The Heritage Court",
-      restriction: "Senior Members Only",
-      feature: "Prime Clubhouse View",
-      icon: <Crown size={18} className="text-amber" />,
-      isPremium: true,
-      img: court1,
-    },
-    {
-      id: "02",
-      name: "The Arena",
-      restriction: "Open Access",
-      feature: "Full Floodlight Array",
-      icon: <Sun size={18} />,
-      isPremium: false,
-      img: court2,
-    },
-    {
-      id: "03",
-      name: "The Veranda Side",
-      restriction: "Open Access",
-      feature: "Morning Mist Shelter",
-      icon: <Wind size={18} />,
-      isPremium: false,
-      img: court3,
-    },
-    {
-      id: "04",
-      name: "The Baseline",
-      restriction: "Open Access",
-      feature: "Championship Run-off",
-      icon: <Trophy size={18} />,
-      isPremium: false,
-      img: court1,
-    },
-  ];
+  const [courts, setCourts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/courts`)
+      .then((res) => res.json())
+      .then((data) => setCourts(data.data || []))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <section className="bg-alabaster py-24 px-6 lg:px-20">
@@ -65,70 +94,22 @@ const CourtGallery = () => {
           </div>
         </div>
 
-        {/* Gallery Grid: Enhanced Verticality */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {courtData.map((court) => (
-            <div
-              key={court.id}
-              className={`group relative h-[550px] lg:h-[650px] rounded-club overflow-hidden transition-all duration-1000 bg-obsidian
-                ${court.isPremium ? 'ring-1 ring-amber/30 shadow-2xl' : 'border border-obsidian/5 shadow-xl shadow-obsidian/5'}
-              `}
-            >
-              {/* Image: Ultra-slow zoom */}
-              <img
-                src={court.img}
-                alt={court.name}
-                className="w-full h-full object-cover grayscale-[0.4] group-hover:grayscale-0 group-hover:scale-110 transition-all duration-[3s] ease-out opacity-80"
-              />
-
-              {/* Gradient Overlay: Deepest at the bottom for text legibility */}
-              <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/20 to-transparent opacity-90 group-hover:opacity-70 transition-opacity duration-1000" />
-
-              {/* Premium/Standard Badge */}
-              <div className="absolute top-8 left-8 transform group-hover:-translate-y-1 transition-transform duration-700">
-                {court.isPremium ? (
-                  <div className="bg-amber text-obsidian px-5 py-2 rounded-full flex items-center gap-2 shadow-xl border border-white/20">
-                    <Crown size={12} fill="currentColor" />
-                    <span className="text-[9px] font-black uppercase tracking-registry">Senior Elite</span>
-                  </div>
-                ) : (
-                  <div className="bg-white/10 backdrop-blur-xl text-alabaster px-5 py-2 rounded-full border border-white/10">
-                    <span className="text-[9px] font-black uppercase tracking-registry">Standard Play</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Court Details: Slide-up Animation */}
-              <div className="absolute inset-0 p-10 flex flex-col justify-end text-alabaster">
-                <div className="space-y-6 transform translate-y-6 group-hover:translate-y-0 transition-all duration-700 ease-out">
-
-                  <div className="flex items-center gap-4">
-                    <span className="text-4xl font-serif italic text-amber/80 drop-shadow-md">{court.id}</span>
-                    <div className="h-px flex-grow bg-alabaster/20" />
-                  </div>
-
-                  <div>
-                    <h3 className="text-2xl font-serif text-white mb-2 leading-tight tracking-tight">{court.name}</h3>
-                    <div className="flex items-center gap-2 text-white/50">
-                      <MapPin size={12} className="text-amber" />
-                      <p className="text-[10px] font-bold uppercase tracking-widest">{court.feature}</p>
-                    </div>
-                  </div>
-
-                  {/* Restriction Tag */}
-                  <div className="pt-4 border-t border-white/10 overflow-hidden">
-                    <p className={`text-[9px] font-black uppercase tracking-registry flex items-center gap-2 transition-transform duration-1000 delay-100
-                      ${court.isPremium ? 'text-amber' : 'text-emerald'}
-                    `}>
-                      <span className={`w-1.5 h-1.5 rounded-full bg-current ${court.isPremium ? 'animate-pulse' : ''}`} />
-                      {court.restriction}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* Gallery Grid: reflows automatically as courts are added/removed in the admin panel */}
+        {loading ? (
+          <div className="py-16 text-center">
+            <p className="text-muted text-xs font-black uppercase tracking-registry">Loading courts...</p>
+          </div>
+        ) : courts.length === 0 ? (
+          <div className="py-16 text-center border border-dashed border-obsidian/10 rounded-club">
+            <p className="text-muted text-sm">Court information will be added here soon.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {courts.map((court) => (
+              <CourtCard key={court.court_id} court={court} />
+            ))}
+          </div>
+        )}
 
         {/* Informative Footer: Dossier Style */}
         <div className="mt-16 p-10 bg-white rounded-club border border-obsidian/5 shadow-sm grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-obsidian/5">
@@ -139,7 +120,7 @@ const CourtGallery = () => {
               <p className="text-[11px] font-black text-obsidian uppercase tracking-[0.2em]">International Red Clay</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-6 py-6 md:py-0 md:px-10">
             <div className="w-14 h-14 rounded-2xl bg-amber/5 text-amber flex items-center justify-center border border-amber/10">
               <Trophy size={20} />
@@ -152,11 +133,11 @@ const CourtGallery = () => {
 
           <div className="flex items-center gap-6 pt-6 md:pt-0 md:pl-10">
             <div className="w-14 h-14 rounded-2xl bg-obsidian/5 text-obsidian flex items-center justify-center border border-obsidian/10">
-              <Crown size={20} />
+              <CheckCircle size={20} />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-registry text-muted mb-1">Exclusive</p>
-              <p className="text-[11px] font-black text-obsidian uppercase tracking-[0.2em]">Senior Registry Area</p>
+              <p className="text-[10px] font-black uppercase tracking-registry text-muted mb-1">Live Status</p>
+              <p className="text-[11px] font-black text-obsidian uppercase tracking-[0.2em]">{courts.filter((c) => c.status === 'available').length} of {courts.length} Available</p>
             </div>
           </div>
         </div>
