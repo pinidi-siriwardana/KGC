@@ -126,9 +126,10 @@ const createGuestLock = async (req, res) => {
                 guest_id = insertGuest.insertId;
             }
 
-            // Same locking-read + reuse pattern as createBooking, extended
-            // with one more "still occupied" condition: a pending row only
-            // blocks while its lock hasn't expired.
+            // Locking read against every row for this slot (any status) —
+            // serializes concurrent attempts on the exact same court/date/
+            // slot through one row lock, same as before. A pending row only
+            // still blocks while its lock hasn't expired.
             const [[existing]] = await connection.query(
                 'SELECT booking_id, status, lock_expires_at FROM bookings WHERE court_id = ? AND booking_date = ? AND slot_id = ? FOR UPDATE',
                 [court_id, booking_date, slot_id]
@@ -137,26 +138,28 @@ const createGuestLock = async (req, res) => {
             const stillLocked = existing && existing.status === 'pending' &&
                 (existing.lock_expires_at === null || new Date(existing.lock_expires_at) > new Date());
 
-            let booking_id;
             if (existing && (existing.status === 'confirmed' || stillLocked)) {
                 conflict('This slot is no longer available.');
-            } else if (existing) {
-                await connection.query(
-                    `UPDATE bookings SET booking_type = 'guest', amount_charged = 0, member_id = NULL, coach_id = NULL, guest_id = ?,
-                            status = 'pending', lock_status = 'unlocked', lock_expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE),
-                            created_by_user_id = NULL, created_at = NOW()
-                     WHERE booking_id = ?`,
-                    [guest_id, existing.booking_id]
-                );
-                booking_id = existing.booking_id;
-            } else {
-                const [insertResult] = await connection.query(
-                    `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, guest_id, status, lock_status, lock_expires_at, created_by_user_id)
-                     VALUES (?, ?, ?, 'guest', 0, ?, 'pending', 'unlocked', DATE_ADD(NOW(), INTERVAL 5 MINUTE), NULL)`,
-                    [court_id, slot_id, booking_date, guest_id]
-                );
-                booking_id = insertResult.insertId;
             }
+
+            // An expired, never-paid lock is closed out as 'cancelled' before
+            // this new lock gets its own row — booking_id is never reused
+            // across two distinct guests, so a stale guest's history (or
+            // lack thereof) can never end up misattributed to whoever books
+            // this slot next. bookings.unique_active_court_slot (a generated
+            // column, only non-NULL while pending/confirmed) is what
+            // actually enforces "one active booking per slot" now — a
+            // cancelled/rejected row simply falls out of that constraint.
+            if (existing && existing.status === 'pending') {
+                await connection.query("UPDATE bookings SET status = 'cancelled' WHERE booking_id = ?", [existing.booking_id]);
+            }
+
+            const [insertResult] = await connection.query(
+                `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, guest_id, status, lock_status, lock_expires_at, created_by_user_id)
+                 VALUES (?, ?, ?, 'guest', 0, ?, 'pending', 'unlocked', DATE_ADD(NOW(), INTERVAL 5 MINUTE), NULL)`,
+                [court_id, slot_id, booking_date, guest_id]
+            );
+            const booking_id = insertResult.insertId;
 
             const [[row]] = await connection.query(
                 'SELECT booking_id, lock_expires_at FROM bookings WHERE booking_id = ?',
@@ -346,29 +349,29 @@ const createBooking = async (req, res) => {
             const stillOccupied = existing && (existing.status === 'confirmed' ||
                 (existing.status === 'pending' && (existing.lock_expires_at === null || new Date(existing.lock_expires_at) > new Date())));
 
-            let booking_id;
             if (stillOccupied) {
                 conflict('This slot is already booked.');
-            } else if (existing) {
-                // Existing row is cancelled/rejected/expired-pending — the
-                // UNIQUE KEY on (court_id, booking_date, slot_id) has no idea
-                // about status, so we reuse this exact row rather than
-                // inserting a new one.
-                await connection.query(
-                    `UPDATE bookings SET booking_type = ?, amount_charged = ?, member_id = ?, guest_id = ?, coach_id = ?,
-                            status = 'confirmed', lock_status = 'unlocked', lock_expires_at = NULL, created_by_user_id = ?, created_at = NOW()
-                     WHERE booking_id = ?`,
-                    [booking_type, amount_charged, member_id, guest_id, coach_id, req.user.user_id, existing.booking_id]
-                );
-                booking_id = existing.booking_id;
-            } else {
-                const [insertResult] = await connection.query(
-                    `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, member_id, guest_id, coach_id, status, lock_status, created_by_user_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', 'unlocked', ?)`,
-                    [court_id, slot_id, booking_date, booking_type, amount_charged, member_id, guest_id, coach_id, req.user.user_id]
-                );
-                booking_id = insertResult.insertId;
             }
+
+            // An expired, never-paid guest lock is closed out as 'cancelled'
+            // before this new booking gets its own row — booking_id is never
+            // reused across two distinct bookings (an already-cancelled/
+            // rejected row here is left exactly as it is), so payments
+            // already recorded (cancellation/no-show/booking fees) can never
+            // end up misattributed to whoever books this slot next.
+            // bookings.unique_active_court_slot (a generated column, only
+            // non-NULL while pending/confirmed) is what actually enforces
+            // "one active booking per slot" now.
+            if (existing && existing.status === 'pending') {
+                await connection.query("UPDATE bookings SET status = 'cancelled' WHERE booking_id = ?", [existing.booking_id]);
+            }
+
+            const [insertResult] = await connection.query(
+                `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, member_id, guest_id, coach_id, status, lock_status, created_by_user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', 'unlocked', ?)`,
+                [court_id, slot_id, booking_date, booking_type, amount_charged, member_id, guest_id, coach_id, req.user.user_id]
+            );
+            const booking_id = insertResult.insertId;
 
             if (booking_type === 'guest' && amount_charged > 0) {
                 await connection.query(

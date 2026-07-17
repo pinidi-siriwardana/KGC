@@ -116,6 +116,50 @@ const ensureClubIdentitySettings = async () => {
     ));
 };
 
+// bookings.unique_court_slot used to be a raw UNIQUE(court_id, booking_date,
+// slot_id) — blind to status, which is exactly why createBooking/
+// createGuestLock used to overwrite (reuse) a cancelled/rejected row's
+// booking_id instead of inserting a fresh one for the next person who took
+// that same slot. That reuse is what let one booking_id silently end up
+// representing two unrelated people's bookings over time, corrupting
+// whichever payments (cancellation/no-show/booking fees) were already
+// recorded against the earlier one. Replacing it with a UNIQUE index on a
+// generated column that's only non-NULL while the row is still
+// pending/confirmed keeps the same "can't double-book this slot" guarantee,
+// but scoped to *active* rows only — MySQL/MariaDB never treat two NULLs as
+// a duplicate, so a cancelled/rejected row's slot becomes free again without
+// its own row (and its payment history) ever being touched. A new booking
+// for that slot now always gets its own new booking_id.
+const ensureBookingsSchema = async () => {
+    try {
+        await pool.query(`
+            ALTER TABLE bookings
+            ADD COLUMN active_slot_key VARCHAR(40)
+                GENERATED ALWAYS AS (CASE WHEN status IN ('pending', 'confirmed') THEN CONCAT(court_id, '-', booking_date, '-', slot_id) END) VIRTUAL
+        `);
+    } catch (err) {
+        ignoreIfAlreadyApplied(err);
+    }
+
+    try {
+        await pool.query('ALTER TABLE bookings DROP INDEX unique_court_slot');
+    } catch (err) {
+        if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY') throw err;
+    }
+
+    try {
+        await pool.query('ALTER TABLE bookings ADD INDEX idx_court_date_slot (court_id, booking_date, slot_id)');
+    } catch (err) {
+        ignoreIfAlreadyApplied(err);
+    }
+
+    try {
+        await pool.query('ALTER TABLE bookings ADD UNIQUE KEY unique_active_court_slot (active_slot_key)');
+    } catch (err) {
+        ignoreIfAlreadyApplied(err);
+    }
+};
+
 const ensureSchema = async () => {
     await ensureGuestsSchema();
     await ensurePaymentsSchema();
@@ -124,6 +168,7 @@ const ensureSchema = async () => {
     await ensureCoachesSchema();
     await ensureCourtsSchema();
     await ensureClubIdentitySettings();
+    await ensureBookingsSchema();
 };
 
 module.exports = { ensureSchema };
