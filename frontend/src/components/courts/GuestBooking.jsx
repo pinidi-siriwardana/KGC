@@ -250,6 +250,7 @@ const GuestBooking = () => {
                         stateMap={stateMap}
                         onSelectSlot={handleSelectSlot}
                         selectedKey={pendingSlot ? slotKey(pendingSlot.court.court_id, pendingSlot.slot.slot_id) : null}
+                        selectedDate={selectedDate}
                     />
                 </div>
             </div>

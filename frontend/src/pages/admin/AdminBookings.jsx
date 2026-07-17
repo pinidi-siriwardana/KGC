@@ -252,6 +252,7 @@ const AdminBookings = () => {
                     stateMap={stateMap}
                     onSelectSlot={handleSelectSlot}
                     selectedKey={pending ? slotKey(pending.court.court_id, pending.slot.slot_id) : null}
+                    selectedDate={selectedDate}
                 />
             </div>
 

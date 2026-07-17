@@ -97,8 +97,21 @@ const createGuestLock = async (req, res) => {
             if (!court) notFound('Court not found.');
             if (!court.is_active || court.status !== 'available') conflict('This court is not available for booking.');
 
-            const [[slot]] = await connection.query('SELECT slot_id FROM time_slots WHERE slot_id = ?', [slot_id]);
+            // Guest bookings are never admin-initiated, so unlike createBooking
+            // this check always applies — no exemption to consider. The date
+            // itself is already validated at the schema level (createGuestLockSchema);
+            // this adds the same-day "has the slot's time fully elapsed"
+            // check the schema can't express (it has no access to the
+            // current clock in a way that's testable/consistent with
+            // MySQL's). Gated on end_time, not start_time — a slot stays
+            // bookable for whatever's left of its duration.
+            const [[slot]] = await connection.query(
+                `SELECT slot_id, (? = CURDATE() AND end_time <= CURTIME()) AS slot_in_past
+                 FROM time_slots WHERE slot_id = ?`,
+                [booking_date, slot_id]
+            );
             if (!slot) notFound('Time slot not found.');
+            if (slot.slot_in_past) badRequest('This time slot has already ended and can no longer be booked.');
 
             let guest_id;
             if (existingGuestId) {
@@ -236,10 +249,6 @@ const createBooking = async (req, res) => {
     const { court_id, slot_id, booking_date } = req.body;
     const role = req.user.role;
 
-    if (role !== 'admin' && booking_date < todayISO()) {
-        return res.status(400).json({ message: 'Cannot book a date in the past.' });
-    }
-
     try {
         const data = await withTransaction(async (connection) => {
             let booking_type, member_id = null, guest_id = null, coach_id = null, amount_charged = 0;
@@ -299,8 +308,27 @@ const createBooking = async (req, res) => {
             if (!court) notFound('Court not found.');
             if (!court.is_active || court.status !== 'available') conflict('This court is not available for booking.');
 
-            const [[slot]] = await connection.query('SELECT slot_id FROM time_slots WHERE slot_id = ?', [slot_id]);
+            // date_in_past/slot_in_past are computed against MySQL's own
+            // CURDATE()/CURTIME() rather than Node's clock, so this can't
+            // drift out of sync with the occupancy checks below (which
+            // already rely on MySQL's NOW() for lock expiry) even if the
+            // app server and DB aren't in the same timezone.
+            const [[slot]] = await connection.query(
+                `SELECT slot_id,
+                        (? < CURDATE()) AS date_in_past,
+                        (? = CURDATE() AND end_time <= CURTIME()) AS slot_in_past
+                 FROM time_slots WHERE slot_id = ?`,
+                [booking_date, booking_date, slot_id]
+            );
             if (!slot) notFound('Time slot not found.');
+            // Admins keep their existing exemption from the past-DATE rule
+            // (for backfilling/correcting old records) — but the same-day
+            // "has this slot's time already fully elapsed" rule applies to
+            // everyone uniformly, admin included: a slot stays bookable for
+            // its remaining duration (e.g. it's 1:30, the 1-2pm slot still
+            // has 30 minutes left) until its end_time, not its start_time.
+            if (role !== 'admin' && slot.date_in_past) badRequest('Cannot book a date in the past.');
+            if (slot.slot_in_past) badRequest('This time slot has already ended and can no longer be booked.');
 
             // Locking read: even with no matching row yet, InnoDB takes a gap
             // lock here, so a concurrent request for the same slot blocks
