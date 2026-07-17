@@ -4,6 +4,7 @@ const cors = require('cors');
 require('dotenv').config();
 const pool = require('./config/db');
 const { ensureSchema } = require('./utils/schemaBootstrap');
+const { runNoShowSweep } = require('./utils/noShowSweep');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const memberRoutes = require('./routes/memberRoutes');
@@ -26,7 +27,19 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const weatherRoutes = require('./routes/weatherRoutes');
 const logger = require('./middleware/logger');
 
-ensureSchema().catch((err) => console.error('Schema bootstrap failed:', err.message));
+ensureSchema()
+    .then(() => runNoShowSweep())
+    .catch((err) => console.error('Schema bootstrap failed:', err.message));
+
+// Periodically charges the no-show fee for any confirmed member/coach
+// booking whose time slot has passed with nobody checked in — see
+// utils/noShowSweep.js. No cron dependency in this project, so a plain
+// interval is the simplest fit; every 5 minutes keeps the delay between a
+// slot ending and the fee landing small without hammering the DB.
+const NO_SHOW_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+setInterval(() => {
+    runNoShowSweep().catch((err) => console.error('No-show sweep failed:', err.message));
+}, NO_SHOW_SWEEP_INTERVAL_MS);
 
 const app = express();
 
