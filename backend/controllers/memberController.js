@@ -136,11 +136,19 @@ const deleteMember = async (req, res) => {
             return res.status(404).json({ message: 'Member not found.' });
         }
 
-        // Deleting the user cascades to the members row (fk_member_user ON DELETE CASCADE).
+        // Deleting the user cascades to the members row (fk_member_user ON
+        // DELETE CASCADE) — but bookings.member_id/created_by_user_id are
+        // ON DELETE RESTRICT, so this still fails for anyone who's ever
+        // booked a court, which is the normal case, not an edge one.
         await pool.query('DELETE FROM users WHERE user_id = ?', [member.user_id]);
 
         res.json({ message: 'Member and login account deleted.' });
     } catch (err) {
+        if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED') {
+            return res.status(409).json({
+                message: 'Cannot delete: this member has booking or payment history. Disable their account instead (Access Management) if they should lose access.'
+            });
+        }
         res.status(500).json({ message: 'Failed to delete member.', error: err.message });
     }
 };

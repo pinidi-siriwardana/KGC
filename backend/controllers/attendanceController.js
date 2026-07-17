@@ -152,6 +152,19 @@ const checkIn = async (req, res) => {
                 [booking_id, member_id || null, coach_id || null, checkinAt]
             );
 
+            // A late check-in (after the sweep already ran, see
+            // utils/noShowSweep.js) proves this wasn't actually a no-show —
+            // waive whatever fee was auto-charged rather than leaving a
+            // contradictory "attended, but still owes a no-show fee" state
+            // for an admin to notice and fix by hand. Only touches a fee
+            // still 'recorded' (unpaid); one already settled/completed is
+            // left alone — same reasoning as restoring a cancelled booking.
+            const [feeResult] = await connection.query(
+                `UPDATE payments SET status = 'waived', notes = TRIM(CONCAT(COALESCE(notes, ''), ' — waived: checked in after being marked a no-show'))
+                 WHERE booking_id = ? AND payment_type = 'no_show_fee' AND status = 'recorded'`,
+                [booking_id]
+            );
+
             const [[row]] = await connection.query(
                 `SELECT a.attendance_id, a.booking_id, a.member_id, a.coach_id, a.checkin_time, a.checkout_time,
                         COALESCE(m.full_name, co.full_name) AS attendee_name
@@ -161,10 +174,13 @@ const checkIn = async (req, res) => {
                  WHERE a.attendance_id = ?`,
                 [result.insertId]
             );
-            return row;
+            return { row, feeWaived: feeResult.affectedRows > 0 };
         });
 
-        res.status(201).json({ message: 'Checked in.', data });
+        res.status(201).json({
+            message: data.feeWaived ? 'Checked in. Its no-show fee has been waived.' : 'Checked in.',
+            data: data.row,
+        });
     } catch (err) {
         if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
         res.status(500).json({ message: 'Failed to check in.', error: err.message });

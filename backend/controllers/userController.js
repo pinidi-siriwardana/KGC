@@ -72,7 +72,10 @@ const createUser = async (req, res) => {
                     [username, password_hash, role, status || 'active']
                 );
                 const user_id = userResult.insertId;
-                const { staff_id } = await createStaffRecord(connection, { user_id, ...profile, staff_type: 'admin' });
+                const { staff_id } = await createStaffRecord(connection, {
+                    user_id, ...profile, staff_type: 'admin',
+                    status: toProfileStatus(status || 'active', 'admin'),
+                });
                 return { user_id, staff_id };
             }
 
@@ -113,7 +116,7 @@ const completeProfile = async (req, res) => {
     const { membership_type_id, start_date, ...profile } = req.body;
 
     try {
-        const [[user]] = await pool.query('SELECT user_id, role FROM users WHERE user_id = ?', [id]);
+        const [[user]] = await pool.query('SELECT user_id, role, status FROM users WHERE user_id = ?', [id]);
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
@@ -147,6 +150,7 @@ const completeProfile = async (req, res) => {
             if (user.role === 'admin') {
                 const { staff_id } = await createStaffRecord(connection, {
                     user_id: id, full_name: profile.full_name, email: profile.email, phone: profile.phone, staff_type: 'admin',
+                    status: toProfileStatus(user.status, 'admin'),
                 });
                 return { staff_id };
             }

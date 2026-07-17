@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Trophy, Settings, Hammer, CheckCircle, Activity, Camera, Loader2 } from 'lucide-react';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
-import { apiFetch, API_URL } from '../../utils/api';
+import { apiFetch, API_URL, parseErrorMessage } from '../../utils/api';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -54,8 +54,8 @@ const AdminCourts = () => {
       setCourts((cs) => cs.map((c) => (c.court_id === court_id ? { ...c, photo_url: data.photo_url } : c)));
       setBrokenPhotos((b) => ({ ...b, [court_id]: false }));
     } else {
-      const err = await res.json();
-      setPhotoErrors((e) => ({ ...e, [court_id]: err.message || 'Failed to upload photo.' }));
+      const message = await parseErrorMessage(res, 'Failed to upload photo.');
+      setPhotoErrors((e) => ({ ...e, [court_id]: message }));
     }
   };
 

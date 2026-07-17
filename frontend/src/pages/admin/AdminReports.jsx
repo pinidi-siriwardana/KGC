@@ -11,6 +11,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas-pro';
 import { apiFetch } from '../../utils/api';
+import { todayISO, daysAgoISO } from '../../utils/date';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
 
@@ -40,9 +41,6 @@ const PAYMENT_TYPE_ICON = {
 
 const CHART_INK = { grid: '#e1e0d9', axis: '#c3c2b7', muted: '#898781', primary: '#0b0b0b' };
 const TREND_COLOR = '#2a78d6';
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const daysAgoISO = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
 const formatLKR = (n) => `LKR ${Number(n || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

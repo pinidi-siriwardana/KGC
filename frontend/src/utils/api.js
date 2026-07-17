@@ -18,3 +18,18 @@ export const apiFetch = (path, options = {}) => {
         },
     });
 };
+
+// Every controller in this app responds with JSON on error, but an upload
+// route can still fail before it ever reaches a controller (a network drop
+// mid-upload, a proxy/gateway error page in production) — `res.json()` on a
+// non-JSON body throws, and an unhandled throw here would otherwise leave
+// the caller's "submitting" state stuck with no error shown. Callers should
+// use this instead of a bare `await res.json()` on an error response.
+export const parseErrorMessage = async (res, fallback) => {
+    try {
+        const data = await res.json();
+        return data.message || fallback;
+    } catch {
+        return fallback;
+    }
+};

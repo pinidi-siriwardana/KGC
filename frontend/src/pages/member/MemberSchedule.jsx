@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Lock, X } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
+import { todayISO } from '../../utils/date';
 
 const formatDate = (dateStr) =>
     new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });

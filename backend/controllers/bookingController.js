@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const { withTransaction } = pool;
 const { normalizeIfPhone } = require('../validation/common');
@@ -8,8 +9,6 @@ const badRequest = (m) => { const e = new Error(m); e.statusCode = 400; throw e;
 const forbidden = (m) => { const e = new Error(m); e.statusCode = 403; throw e; };
 const notFound = (m) => { const e = new Error(m); e.statusCode = 404; throw e; };
 const conflict = (m) => { const e = new Error(m); e.statusCode = 409; throw e; };
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 // Same "proper membership" bar MembershipGate/memberPortalController.getMe
 // already enforce on the frontend (no membership row, or its end_date has
@@ -119,11 +118,27 @@ const createGuestLock = async (req, res) => {
                 if (!guest) badRequest('Invalid guest_id.');
                 guest_id = guest.guest_id;
             } else {
-                const [insertGuest] = await connection.query(
-                    'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
-                    [guest_full_name, guest_phone, guest_email || null]
+                // lookupGuest is only a convenience the frontend calls first
+                // — nothing stops a caller (or a race between two concurrent
+                // first-time submissions) from skipping straight to here, so
+                // re-check by phone under this same transaction rather than
+                // trusting the client already deduped. FOR UPDATE so two
+                // concurrent inserts for the same new phone can't both slip
+                // through and create two guest rows for one real person.
+                const normalizedPhone = normalizeIfPhone(guest_phone);
+                const [[existingGuest]] = await connection.query(
+                    'SELECT guest_id FROM guests WHERE is_deleted = 0 AND phone = ? FOR UPDATE',
+                    [normalizedPhone]
                 );
-                guest_id = insertGuest.insertId;
+                if (existingGuest) {
+                    guest_id = existingGuest.guest_id;
+                } else {
+                    const [insertGuest] = await connection.query(
+                        'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
+                        [guest_full_name, normalizedPhone, guest_email || null]
+                    );
+                    guest_id = insertGuest.insertId;
+                }
             }
 
             // Locking read against every row for this slot (any status) —
@@ -154,15 +169,22 @@ const createGuestLock = async (req, res) => {
                 await connection.query("UPDATE bookings SET status = 'cancelled' WHERE booking_id = ?", [existing.booking_id]);
             }
 
+            // lock_token is a possession secret, not a guessable sequential
+            // id — submitGuestPayment requires it to match before accepting
+            // a receipt against this booking, so an attacker who only knows
+            // (or enumerates) the booking_id can't submit a payment against
+            // a stranger's in-progress lock and hijack/freeze their slot.
+            const lock_token = crypto.randomBytes(24).toString('hex');
+
             const [insertResult] = await connection.query(
-                `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, guest_id, status, lock_status, lock_expires_at, created_by_user_id)
-                 VALUES (?, ?, ?, 'guest', 0, ?, 'pending', 'unlocked', DATE_ADD(NOW(), INTERVAL 5 MINUTE), NULL)`,
-                [court_id, slot_id, booking_date, guest_id]
+                `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, guest_id, status, lock_status, lock_expires_at, lock_token, created_by_user_id)
+                 VALUES (?, ?, ?, 'guest', 0, ?, 'pending', 'unlocked', DATE_ADD(NOW(), INTERVAL 5 MINUTE), ?, NULL)`,
+                [court_id, slot_id, booking_date, guest_id, lock_token]
             );
             const booking_id = insertResult.insertId;
 
             const [[row]] = await connection.query(
-                'SELECT booking_id, lock_expires_at FROM bookings WHERE booking_id = ?',
+                'SELECT booking_id, lock_expires_at, lock_token FROM bookings WHERE booking_id = ?',
                 [booking_id]
             );
             return row;
@@ -178,10 +200,14 @@ const createGuestLock = async (req, res) => {
 
 // Public: guest uploads their payment receipt against the booking they just
 // locked. Clears lock_expires_at — the slot stays held, now awaiting admin
-// review instead of counting down toward payment.
+// review instead of counting down toward payment. Requires the lock_token
+// createGuestLock handed back to the browser that made the lock — this
+// route has no auth (guests have no accounts), and without that token check
+// a bare, guessable booking_id would let anyone submit a receipt against a
+// stranger's in-progress lock and hijack/freeze their slot.
 const submitGuestPayment = async (req, res) => {
     const booking_id = req.params.id;
-    const { note } = req.body;
+    const { note, lock_token } = req.body;
     const receiptFile = req.file;
 
     const fail = (status, message) => {
@@ -191,14 +217,22 @@ const submitGuestPayment = async (req, res) => {
 
     if (!booking_id) return fail(400, 'booking_id is required.');
     if (!receiptFile) return fail(400, 'A payment slip (receipt) is required.');
+    if (!lock_token) return fail(403, 'Missing or invalid booking reference.');
 
     try {
         const [[booking]] = await pool.query('SELECT * FROM bookings WHERE booking_id = ?', [booking_id]);
         if (!booking) return fail(404, 'Booking not found.');
+        if (!booking.lock_token || booking.lock_token !== lock_token) return fail(403, 'Missing or invalid booking reference.');
         if (booking.status !== 'pending') return fail(409, `This booking is already ${booking.status}.`);
         if (booking.lock_expires_at && new Date(booking.lock_expires_at) <= new Date()) {
             return fail(409, 'This slot hold has expired. Please select a slot again.');
         }
+
+        const [[alreadySubmitted]] = await pool.query(
+            "SELECT verification_id FROM payment_verification WHERE booking_id = ? AND status = 'pending'",
+            [booking_id]
+        );
+        if (alreadySubmitted) return fail(409, 'A payment for this booking is already awaiting review.');
 
         const [[setting]] = await pool.query("SELECT setting_value FROM club_settings WHERE setting_key = 'guest_booking_fee'");
         const fee = setting ? Number(setting.setting_value) : 0;
@@ -292,11 +326,24 @@ const createBooking = async (req, res) => {
                         if (!guest_full_name || !guest_phone) {
                             badRequest('guest_id OR guest_full_name and guest_phone are required.');
                         }
-                        const [insertGuest] = await connection.query(
-                            'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
-                            [guest_full_name, guest_phone, guest_email || null]
+                        // Same dedup-by-phone createGuestLock does — an admin
+                        // typing a new guest's details here without first
+                        // looking them up shouldn't create a second guest
+                        // record for someone who already has one.
+                        const normalizedPhone = normalizeIfPhone(guest_phone);
+                        const [[existingGuest]] = await connection.query(
+                            'SELECT guest_id FROM guests WHERE is_deleted = 0 AND phone = ? FOR UPDATE',
+                            [normalizedPhone]
                         );
-                        guest_id = insertGuest.insertId;
+                        if (existingGuest) {
+                            guest_id = existingGuest.guest_id;
+                        } else {
+                            const [insertGuest] = await connection.query(
+                                'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
+                                [guest_full_name, normalizedPhone, guest_email || null]
+                            );
+                            guest_id = insertGuest.insertId;
+                        }
                     }
 
                     const numericAmount = Number(req.body.amount_charged);
@@ -399,7 +446,15 @@ const updateBookingStatus = async (req, res) => {
 
     try {
         const result = await withTransaction(async (connection) => {
-            const [[booking]] = await connection.query('SELECT * FROM bookings WHERE booking_id = ? FOR UPDATE', [id]);
+            // date_in_past computed in SQL (CURDATE()) rather than compared
+            // against a Node-side "today" string — `new Date().toISOString()`
+            // is always UTC, so for a club in UTC+5:30 that comparison would
+            // be a full calendar day behind local time for roughly the first
+            // 5.5 hours of every real day.
+            const [[booking]] = await connection.query(
+                'SELECT *, (booking_date < CURDATE()) AS date_in_past FROM bookings WHERE booking_id = ? FOR UPDATE',
+                [id]
+            );
             if (!booking) notFound('Booking not found.');
 
             if (req.user.role === 'admin') {
@@ -414,6 +469,35 @@ const updateBookingStatus = async (req, res) => {
                     if (!['cancelled', 'rejected'].includes(booking.status)) {
                         conflict(`This booking is ${booking.status}, not cancelled or rejected.`);
                     }
+
+                    // Same "can't act on a slot whose time has already
+                    // elapsed" rule every other booking path enforces —
+                    // restoring used to bypass it entirely, letting a
+                    // booking be resurrected for a slot that's already over
+                    // (and immediately no-show-charged by the sweep).
+                    const [[slot]] = await connection.query(
+                        `SELECT (b.booking_date < CURDATE()) AS date_in_past,
+                                (b.booking_date = CURDATE() AND ts.end_time <= CURTIME()) AS slot_in_past
+                         FROM bookings b JOIN time_slots ts ON b.slot_id = ts.slot_id
+                         WHERE b.booking_id = ?`,
+                        [id]
+                    );
+                    if (slot.date_in_past || slot.slot_in_past) {
+                        badRequest("This booking's time slot has already passed and can no longer be restored.");
+                    }
+
+                    // The freed-up slot may have already been claimed by
+                    // someone else since this booking was cancelled/rejected —
+                    // restoring would otherwise collide with
+                    // unique_active_court_slot (only one pending/confirmed
+                    // booking allowed per court/date/slot).
+                    const [[activeConflict]] = await connection.query(
+                        `SELECT booking_id FROM bookings
+                         WHERE court_id = ? AND booking_date = ? AND slot_id = ? AND status IN ('pending', 'confirmed') AND booking_id != ?`,
+                        [booking.court_id, booking.booking_date, booking.slot_id, id]
+                    );
+                    if (activeConflict) conflict('This slot has since been booked by someone else and can no longer be restored.');
+
                     await connection.query("UPDATE bookings SET status = 'confirmed' WHERE booking_id = ?", [id]);
 
                     // A self-cancellation fee only made sense while the
@@ -447,7 +531,7 @@ const updateBookingStatus = async (req, res) => {
             const ownerField = req.user.role === 'member' ? 'member_id' : 'coach_id';
             if (!selfId || booking[ownerField] !== selfId) forbidden('You can only cancel your own bookings.');
             if (booking.lock_status === 'locked') forbidden('This booking is locked and cannot be self-cancelled.');
-            if (booking.booking_date < todayISO()) forbidden('Cannot cancel a past booking.');
+            if (booking.date_in_past) forbidden('Cannot cancel a past booking.');
             if (!['pending', 'confirmed'].includes(booking.status)) {
                 conflict(`This booking is already ${booking.status}.`);
             }

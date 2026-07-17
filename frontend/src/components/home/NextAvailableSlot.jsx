@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { CalendarClock, ArrowUpRight } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
+import { todayISO } from '../../utils/date';
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
 const nowTimeString = () => new Date().toTimeString().slice(0, 8); // "HH:MM:SS"
 
 const formatTime = (t) => {

@@ -5,7 +5,7 @@ const {
     getAvailability, getBookings, createBooking, updateBookingStatus, updateBookingDetails,
     lookupGuest, createGuestLock, submitGuestPayment,
 } = require('../controllers/bookingController');
-const { uploadReceipt } = require('../middleware/upload');
+const { uploadReceipt, singleUpload } = require('../middleware/upload');
 const { validate } = require('../middleware/validate');
 const { idParam } = require('../validation/common');
 const {
@@ -20,7 +20,7 @@ router.get('/availability', validate(availabilityQuerySchema, 'query'), getAvail
 router.get('/guest-lookup', validate(lookupGuestQuerySchema, 'query'), lookupGuest);
 router.post('/guest-lock', validate(createGuestLockSchema), createGuestLock);
 // validate() runs AFTER upload — multer hasn't parsed req.body yet before that.
-router.post('/guest-lock/:id/pay', validate(idParam(), 'params'), uploadReceipt.single('receipt'), submitGuestPayment);
+router.post('/guest-lock/:id/pay', validate(idParam(), 'params'), singleUpload(uploadReceipt, 'receipt'), submitGuestPayment);
 
 router.use(verifyToken, requireRole('admin', 'member', 'coach'));
 

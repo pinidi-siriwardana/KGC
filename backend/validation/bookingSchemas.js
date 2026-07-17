@@ -1,7 +1,17 @@
 const { z } = require('zod');
 const { dateString, phone, nonNegativeAmount } = require('./common');
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// A schema can't do a DB round-trip (no CURDATE() here, unlike the
+// authoritative controller-side checks), and the server process's own OS
+// timezone isn't guaranteed to match the club's (Sri Lanka, UTC+5:30) — a
+// cloud host commonly defaults to UTC regardless of where the club actually
+// is. Computed via a fixed offset instead of `new Date().toISOString()`
+// (always UTC), which would otherwise still be "yesterday" here for the
+// first ~5.5 hours of every real Sri Lanka day. This is only a soft,
+// best-effort pre-check anyway (see the comment on createGuestLock's own
+// CURDATE()-based check, which is what actually enforces this rule).
+const SRI_LANKA_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const todayISO = () => new Date(Date.now() + SRI_LANKA_OFFSET_MS).toISOString().slice(0, 10);
 
 const availabilityQuerySchema = z.object({
     date: dateString,

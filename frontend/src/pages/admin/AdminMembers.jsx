@@ -5,6 +5,7 @@ import MembershipStatusBadge from '../../components/common/MembershipStatusBadge
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
 import { apiFetch } from '../../utils/api';
+import { todayISO } from '../../utils/date';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -12,8 +13,6 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Inactive' },
   { value: 'suspended', label: 'Suspended' },
 ];
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const formatDate = (dateStr) =>
   dateStr ? new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -104,8 +103,13 @@ const AdminMembers = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete member and login account?")) return;
-    await apiFetch(`/api/members/delete/${id}`, { method: 'DELETE' });
-    fetchMembers();
+    const res = await apiFetch(`/api/members/delete/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      fetchMembers();
+    } else {
+      const err = await res.json();
+      alert(err.message || 'Failed to delete member.');
+    }
   };
 
   return (

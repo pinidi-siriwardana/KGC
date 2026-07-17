@@ -1,9 +1,9 @@
 import React from 'react';
 import { slotKey } from '../../utils/bookingKey';
+import { todayISO } from '../../utils/date';
 
 const formatTime = (t) => (t ? t.slice(0, 5) : '');
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
 const nowTimeString = () => new Date().toTimeString().slice(0, 8); // "HH:MM:SS", matches TIME columns
 
 const LABEL = { available: 'Open', locked: 'Locked', booked: 'Booked', maintenance: '—', past: 'Passed' };

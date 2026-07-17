@@ -7,11 +7,23 @@ const REVENUE_STATUS = 'completed';
 
 const toISODate = (date) => date.toISOString().slice(0, 10);
 
+// Only used to default an *unset* `to` — CURDATE() rather than Node's
+// `new Date().toISOString()` (always UTC), which for a club in UTC+5:30
+// would default the report range to end "yesterday" for the first ~5.5
+// hours of every real day, silently excluding that morning's transactions.
+// Every other date computed in this file is pure day-count arithmetic on an
+// already-known date string (no ambiguity — see toISODate's other callers
+// below), so this is the one spot that actually needed a DB round-trip.
+const getToday = async () => {
+    const [[{ today }]] = await pool.query('SELECT CURDATE() AS today');
+    return today;
+};
+
 // Query params are optional (e.g. this controller reused without a UI-driven
 // range), so a bounded default keeps the query and the trend comparison
 // well-defined instead of scanning the entire payments history.
-const resolveRange = (from, to) => {
-    const effectiveTo = to || toISODate(new Date());
+const resolveRange = async (from, to) => {
+    const effectiveTo = to || await getToday();
     const effectiveFrom = from || toISODate(new Date(new Date(effectiveTo).getTime() - 29 * 86400000));
     return { effectiveFrom, effectiveTo };
 };
@@ -48,9 +60,13 @@ const GROUP_EXPR = {
 // Shared by the /summary HTTP handler and the admin dashboard overview,
 // which both need the exact same totals/trend computation.
 const fetchRevenueSummary = async ({ from, to, type, search, groupBy = 'day' } = {}) => {
-    const { effectiveFrom, effectiveTo } = resolveRange(from, to);
+    const { effectiveFrom, effectiveTo } = await resolveRange(from, to);
     const { whereClause, values } = buildConditions({ type, search, effectiveFrom, effectiveTo });
-    const groupExpr = GROUP_EXPR[groupBy];
+    // An unrecognized groupBy (typo, stale client, manual API call) would
+    // otherwise interpolate as literal `undefined` into the SQL below and
+    // 500 with a raw "unknown column" error — falling back to 'day' keeps
+    // this a safe default instead of a crash.
+    const groupExpr = GROUP_EXPR[groupBy] || GROUP_EXPR.day;
 
     // Previous period of equal length, immediately preceding effectiveFrom.
     const rangeDays = Math.round((new Date(effectiveTo) - new Date(effectiveFrom)) / 86400000) + 1;
@@ -118,10 +134,11 @@ const getRevenueSummary = async (req, res) => {
 
 const getRevenueTransactions = async (req, res) => {
     const { from, to, type, search } = req.query;
-    const { effectiveFrom, effectiveTo } = resolveRange(from, to);
-    const { whereClause, values } = buildConditions({ type, search, effectiveFrom, effectiveTo });
 
     try {
+        const { effectiveFrom, effectiveTo } = await resolveRange(from, to);
+        const { whereClause, values } = buildConditions({ type, search, effectiveFrom, effectiveTo });
+
         const [rows] = await pool.query(
             `SELECT p.*, COALESCE(m.full_name, c.full_name, g.full_name) AS payer_name,
                     u.username AS handled_by_username

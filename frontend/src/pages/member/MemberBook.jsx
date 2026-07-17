@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { CalendarDays, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
+import { todayISO } from '../../utils/date';
+import { useCourtsAndSlots } from '../../hooks/useCourtsAndSlots';
 import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
 import Modal from '../../components/common/Modal';
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-
 const MemberBook = () => {
     const [selectedDate, setSelectedDate] = useState(todayISO());
-    const [courts, setCourts] = useState([]);
-    const [slots, setSlots] = useState([]);
+    const { courts, slots, error: gridError, retry: retryGrid } = useCourtsAndSlots();
     const [stateMap, setStateMap] = useState({});
     const [pending, setPending] = useState(null);
     const [error, setError] = useState('');
@@ -21,8 +20,6 @@ const MemberBook = () => {
     const [dues, setDues] = useState({ hasDues: false, totalDue: 0, count: 0 });
 
     useEffect(() => {
-        apiFetch('/api/courts').then((res) => res.json()).then((data) => setCourts(data.data || []));
-        apiFetch('/api/time-slots').then((res) => res.json()).then((data) => setSlots(data.data || []));
         apiFetch('/api/settings').then((res) => res.json()).then((data) => setCancellationFee(data.data?.cancellation_fee ?? null));
         apiFetch('/api/member/payments/dues-summary').then((res) => res.json()).then((data) => setDues(data));
     }, []);
@@ -108,14 +105,26 @@ const MemberBook = () => {
                     />
                 </div>
 
-                <CourtSlotGrid
-                    courts={courts}
-                    slots={slots}
-                    stateMap={stateMap}
-                    onSelectSlot={handleSelectSlot}
-                    selectedKey={pending ? slotKey(pending.court.court_id, pending.slot.slot_id) : null}
-                    selectedDate={selectedDate}
-                />
+                {gridError ? (
+                    <div className="flex flex-col items-center gap-3 py-10 text-center">
+                        <p className="text-red-600 text-sm font-medium">{gridError}</p>
+                        <button
+                            type="button" onClick={retryGrid}
+                            className="text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:underline"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                ) : (
+                    <CourtSlotGrid
+                        courts={courts}
+                        slots={slots}
+                        stateMap={stateMap}
+                        onSelectSlot={handleSelectSlot}
+                        selectedKey={pending ? slotKey(pending.court.court_id, pending.slot.slot_id) : null}
+                        selectedDate={selectedDate}
+                    />
+                )}
             </div>
 
             <Modal

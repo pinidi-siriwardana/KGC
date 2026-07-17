@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CalendarDays, Info, FileUp, CheckCircle2, Clock, UserCheck2 } from 'lucide-react';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseErrorMessage } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
+import { todayISO } from '../../utils/date';
+import { useCourtsAndSlots } from '../../hooks/useCourtsAndSlots';
 import Modal from '../../components/common/Modal';
 import BankDetails from '../../components/common/BankDetails';
 import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const emptyGuestForm = () => ({ guest_full_name: '', guest_phone: '', guest_email: '' });
 
@@ -21,8 +21,7 @@ const formatRemaining = (seconds) => {
 
 const GuestBooking = () => {
     const [selectedDate, setSelectedDate] = useState(todayISO());
-    const [courts, setCourts] = useState([]);
-    const [slots, setSlots] = useState([]);
+    const { courts, slots, error: gridError, retry: retryGrid } = useCourtsAndSlots();
     const [stateMap, setStateMap] = useState({});
     const [settings, setSettings] = useState(null);
 
@@ -40,8 +39,6 @@ const GuestBooking = () => {
     const timerRef = useRef(null);
 
     useEffect(() => {
-        apiFetch('/api/courts').then((res) => res.json()).then((data) => setCourts(data.data || []));
-        apiFetch('/api/time-slots').then((res) => res.json()).then((data) => setSlots(data.data || []));
         apiFetch('/api/settings').then((res) => res.json()).then((data) => setSettings(data.data || null));
     }, []);
 
@@ -181,6 +178,7 @@ const GuestBooking = () => {
 
         const body = new FormData();
         if (note) body.append('note', note);
+        body.append('lock_token', lockedBooking.lock_token);
         body.append('receipt', receiptFile);
 
         const res = await apiFetch(`/api/bookings/guest-lock/${lockedBooking.booking_id}/pay`, { method: 'POST', body });
@@ -190,8 +188,7 @@ const GuestBooking = () => {
             clearInterval(timerRef.current);
             setStep('done');
         } else {
-            const err = await res.json();
-            setError(err.message || 'Failed to submit payment.');
+            setError(await parseErrorMessage(res, 'Failed to submit payment.'));
         }
     };
 
@@ -244,14 +241,26 @@ const GuestBooking = () => {
                         />
                     </div>
 
-                    <CourtSlotGrid
-                        courts={courts}
-                        slots={slots}
-                        stateMap={stateMap}
-                        onSelectSlot={handleSelectSlot}
-                        selectedKey={pendingSlot ? slotKey(pendingSlot.court.court_id, pendingSlot.slot.slot_id) : null}
-                        selectedDate={selectedDate}
-                    />
+                    {gridError ? (
+                        <div className="flex flex-col items-center gap-3 py-10 text-center">
+                            <p className="text-rose-600 text-sm font-medium">{gridError}</p>
+                            <button
+                                type="button" onClick={retryGrid}
+                                className="text-[10px] font-black uppercase tracking-registry text-emerald hover:underline"
+                            >
+                                Try again
+                            </button>
+                        </div>
+                    ) : (
+                        <CourtSlotGrid
+                            courts={courts}
+                            slots={slots}
+                            stateMap={stateMap}
+                            onSelectSlot={handleSelectSlot}
+                            selectedKey={pendingSlot ? slotKey(pendingSlot.court.court_id, pendingSlot.slot.slot_id) : null}
+                            selectedDate={selectedDate}
+                        />
+                    )}
                 </div>
             </div>
 

@@ -71,4 +71,19 @@ const uploadCourtPhoto = multer({
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB — a wider facility shot, not just a headshot
 });
 
-module.exports = { uploadReceipt, uploadCoachPhoto, uploadCourtPhoto, SLIPS_DIR, COACHES_DIR, COURTS_DIR };
+// multer reports a bad upload (wrong type, too large) via an error callback
+// rather than throwing, so calling `multerInstance.single(field)` directly
+// as route middleware lets that error fall through to Express's generic
+// HTML error page instead of a clean JSON response — which every frontend
+// fetch handler in this app assumes it'll get (`await res.json()` on an
+// HTML body throws), turning a simple "file too big" into a silent, no-error
+// stuck UI. Every route that accepts a file upload should use this wrapper
+// instead of calling `.single(...)` inline.
+const singleUpload = (multerInstance, fieldName) => (req, res, next) => {
+    multerInstance.single(fieldName)(req, res, (err) => {
+        if (err) return res.status(400).json({ message: err.message });
+        next();
+    });
+};
+
+module.exports = { uploadReceipt, uploadCoachPhoto, uploadCourtPhoto, singleUpload, SLIPS_DIR, COACHES_DIR, COURTS_DIR };

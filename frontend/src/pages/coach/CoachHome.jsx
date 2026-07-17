@@ -4,6 +4,7 @@ import { PlusCircle, Wallet, CreditCard, Activity, Timer, UserCheck, CalendarChe
 import StatCard from '../../components/common/StatCard';
 import CourtWeather from '../../components/common/CourtWeather';
 import { apiFetch } from '../../utils/api';
+import { todayISO } from '../../utils/date';
 
 const CATEGORY_BORDER = {
   CHAMPIONSHIP: 'border-amber-500',
@@ -12,7 +13,6 @@ const CATEGORY_BORDER = {
   GENERAL: 'border-emerald-500',
 };
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
 const formatLKR = (n) => `LKR ${Number(n || 0).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
 
 const CoachHome = () => {

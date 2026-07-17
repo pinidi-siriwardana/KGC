@@ -3,7 +3,7 @@ import { UserCheck, Mail, Award, Phone, Settings, Trash2, Plus, X, Camera, Loade
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
-import { apiFetch, API_URL } from '../../utils/api';
+import { apiFetch, API_URL, parseErrorMessage } from '../../utils/api';
 
 const STATUS_OPTIONS = [
     { value: '', label: 'All Statuses' },
@@ -81,15 +81,19 @@ const AdminCoaches = () => {
             setPreviewBroken(false);
             fetchCoaches();
         } else {
-            const err = await res.json();
-            setPhotoError(err.message || 'Failed to upload photo.');
+            setPhotoError(await parseErrorMessage(res, 'Failed to upload photo.'));
         }
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure? This will also delete the coach's login account.")) return;
         const res = await apiFetch(`/api/coaches/delete/${id}`, { method: 'DELETE' });
-        if (res.ok) fetchCoaches();
+        if (res.ok) {
+            fetchCoaches();
+        } else {
+            const err = await res.json();
+            alert(err.message || 'Failed to delete coach.');
+        }
     };
 
     const handleSubmit = async (e) => {

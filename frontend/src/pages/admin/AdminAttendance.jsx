@@ -4,10 +4,9 @@ import { apiFetch } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
+import { todayISO } from '../../utils/date';
 
 const ATTENDEE_PAGE_SIZE = 8;
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const timeOf = (ts) => ts ? ts.slice(11, 16) : '';
 const dateOf = (ts) => ts ? ts.slice(0, 10) : '';
@@ -146,7 +145,9 @@ const AdminAttendance = () => {
             }),
         });
         if (res.ok) {
+            const body = await res.json();
             setAddAttendeeFor(null);
+            if (body.message?.includes('waived')) flash(setSuccess, body.message);
             fetchAttendance();
         } else {
             const err = await res.json();

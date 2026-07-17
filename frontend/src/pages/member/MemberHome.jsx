@@ -4,6 +4,7 @@ import { PlusCircle, Calendar, Trophy, Bell, Clock, Timer, Users } from 'lucide-
 import StatCard from '../../components/common/StatCard';
 import CourtWeather from '../../components/common/CourtWeather';
 import { apiFetch } from '../../utils/api';
+import { todayISO } from '../../utils/date';
 
 const CATEGORY_BORDER = {
   CHAMPIONSHIP: 'border-amber-500',
@@ -11,8 +12,6 @@ const CATEGORY_BORDER = {
   'CLUB EVENT': 'border-slate-900',
   GENERAL: 'border-emerald-500',
 };
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const formatDate = (dateStr) =>
   new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

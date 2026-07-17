@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck, Ban, CircleCheck, CircleSlash, Heart, Landmark, UserX } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
+import { todayISO } from '../../utils/date';
 import Modal from '../../components/common/Modal';
 
 const PAYMENT_TYPE_ICON = {
@@ -13,8 +14,6 @@ const PAYMENT_TYPE_ICON = {
     tournament_fee: Trophy,
     no_show_fee: UserX,
 };
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const emptyFormData = () => ({
     purpose: 'new_member',
@@ -135,7 +134,11 @@ const AdminPayments = () => {
         setEditingPayment(payment);
         setEditForm({
             amount: payment.amount,
-            payment_date: new Date(payment.payment_date).toISOString().slice(0, 10),
+            // payment_date already arrives as "YYYY-MM-DD HH:MM:SS" (the
+            // backend's dateStrings:true) — slicing it directly avoids
+            // round-tripping through Date/toISOString, which would silently
+            // shift the date by the browser's UTC offset.
+            payment_date: payment.payment_date.slice(0, 10),
             notes: payment.notes || '',
             status: payment.status,
         });

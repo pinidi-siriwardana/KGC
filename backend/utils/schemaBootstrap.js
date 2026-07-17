@@ -158,6 +158,48 @@ const ensureBookingsSchema = async () => {
     } catch (err) {
         ignoreIfAlreadyApplied(err);
     }
+
+    // lock_token: a possession secret handed back to whoever creates a guest
+    // lock, and required by submitGuestPayment before it'll accept a
+    // receipt against that booking — closes an unauthenticated hijack where
+    // anyone who can guess/enumerate a booking_id could submit a payment
+    // against a stranger's in-progress lock.
+    try {
+        await pool.query('ALTER TABLE bookings ADD COLUMN lock_token VARCHAR(64) DEFAULT NULL');
+    } catch (err) {
+        ignoreIfAlreadyApplied(err);
+    }
+};
+
+// registration_requests.created_user_id: a stable back-reference to the
+// account approveRegistration created, so undoRegistration can find (and
+// remove) it directly instead of re-matching the request's original
+// username against users.username — a match that silently breaks the
+// moment that username is edited via Access Management.
+const ensureRegistrationRequestsSchema = async () => {
+    try {
+        await pool.query(
+            `ALTER TABLE registration_requests
+             ADD COLUMN created_user_id INT(11) DEFAULT NULL,
+             ADD CONSTRAINT fk_reg_created_user FOREIGN KEY (created_user_id) REFERENCES users (user_id) ON DELETE SET NULL`
+        );
+    } catch (err) {
+        ignoreIfAlreadyApplied(err);
+    }
+};
+
+// One-time, best-effort backfill for requests approved before the column
+// above existed — matches on username (the same fragile method undo used
+// to rely on), but only ever runs once per row: it only touches rows still
+// NULL, so it can't undo a legitimate later username change once this has
+// run.
+const backfillRegistrationCreatedUser = async () => {
+    await pool.query(`
+        UPDATE registration_requests rr
+        JOIN users u ON u.username = rr.username
+        SET rr.created_user_id = u.user_id
+        WHERE rr.status = 'approved' AND rr.created_user_id IS NULL
+    `);
 };
 
 const ensureSchema = async () => {
@@ -169,6 +211,8 @@ const ensureSchema = async () => {
     await ensureCourtsSchema();
     await ensureClubIdentitySettings();
     await ensureBookingsSchema();
+    await ensureRegistrationRequestsSchema();
+    await backfillRegistrationCreatedUser();
 };
 
 module.exports = { ensureSchema };

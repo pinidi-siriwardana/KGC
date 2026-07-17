@@ -37,11 +37,6 @@ const getVerificationHistory = async (req, res) => {
     }
 };
 
-const getVerification = async (id) => {
-    const [[row]] = await pool.query('SELECT * FROM payment_verification WHERE verification_id = ?', [id]);
-    return row;
-};
-
 // Approving a registration-type verification doesn't just flip a status: it
 // activates the applicant into a real account (users + members), opens their
 // membership term, and records the payment, all in one transaction so a
@@ -61,7 +56,7 @@ const approveRegistration = async (connection, verification, reviewerId, remarks
         throw err;
     }
 
-    const { member_id } = await createMemberAccount(connection, {
+    const { user_id, member_id } = await createMemberAccount(connection, {
         username: request.username,
         password_hash: request.password_hash,
         full_name: request.full_name,
@@ -91,9 +86,13 @@ const approveRegistration = async (connection, verification, reviewerId, remarks
         [verification.amount_declared, member_id, verification.verification_id, reviewerId]
     );
 
+    // created_user_id is the stable reference undoRegistration uses to find
+    // (and delete, if undone) the account this approval created — set once,
+    // here, so a later username change (Access Management) can never cause
+    // undo to silently miss it.
     await connection.query(
-        "UPDATE registration_requests SET status = 'approved', reviewed_by = ?, reviewed_at = NOW() WHERE request_id = ?",
-        [reviewerId, request.request_id]
+        "UPDATE registration_requests SET status = 'approved', reviewed_by = ?, reviewed_at = NOW(), created_user_id = ? WHERE request_id = ?",
+        [reviewerId, user_id, request.request_id]
     );
 
     await connection.query(
@@ -146,19 +145,28 @@ const approveMembershipRenewal = async (connection, verification, reviewerId, re
         'SELECT end_date FROM memberships WHERE member_id = ? ORDER BY start_date DESC, membership_id DESC LIMIT 1',
         [verification.member_id]
     );
-    const today = new Date().toISOString().slice(0, 10);
+    // CURDATE() rather than Node's `new Date().toISOString()`, which is
+    // always UTC — for a club in UTC+5:30 that would compute "today" as
+    // still yesterday for the first ~5.5 hours of every real day, and could
+    // both misjudge whether the current term has already lapsed and set a
+    // brand-new membership's start_date to the wrong calendar day.
+    const [[{ today }]] = await connection.query('SELECT CURDATE() AS today');
     const startDate = current && current.end_date > today ? current.end_date : today;
 
-    await connection.query(
+    const [membershipResult] = await connection.query(
         `INSERT INTO memberships (member_id, membership_type_id, purchase_price, start_date, end_date, status)
          VALUES (?, ?, ?, ?, DATE_ADD(?, INTERVAL ? MONTH), 'active')`,
         [verification.member_id, verification.membership_type_id, membershipType.price, startDate, startDate, membershipType.duration_months]
     );
 
+    // membership_id links this payment to the exact membership term it paid
+    // for — without it, a later "assign/edit membership" correction can't
+    // find this row (syncMembershipPayment looks up by membership_id) and
+    // ends up inserting a second, duplicate payment for the same term.
     await connection.query(
-        `INSERT INTO payments (amount, payment_type, member_id, verification_id, handled_by, status, notes)
-         VALUES (?, 'membership', ?, ?, ?, 'completed', ?)`,
-        [verification.amount_declared, verification.member_id, verification.verification_id, reviewerId, verification.note]
+        `INSERT INTO payments (amount, payment_type, member_id, membership_id, verification_id, handled_by, status, notes)
+         VALUES (?, 'membership', ?, ?, ?, ?, 'completed', ?)`,
+        [verification.amount_declared, verification.member_id, membershipResult.insertId, verification.verification_id, reviewerId, verification.note]
     );
 
     await connection.query(
@@ -249,10 +257,25 @@ const approveGuestBooking = async (connection, verification, reviewerId, remarks
     );
 };
 
-// Rejecting frees the slot — the existing reuse-on-create logic in
-// createGuestLock/createBooking picks up a 'rejected' row and overwrites it
-// for the next guest.
+// Rejecting frees the slot for the next guest's booking attempt (a fresh
+// row — bookings no longer reuses an old booking_id, see
+// schemaBootstrap.ensureBookingsSchema). Guarded the same way
+// approveGuestBooking is: a booking that's no longer 'pending' (e.g. already
+// approved+paid, then this verification got undone and is being rejected
+// instead) can't be silently rejected out from under a real, settled booking.
 const rejectGuestBooking = async (connection, verification, reviewerId, remarks) => {
+    const [[booking]] = await connection.query('SELECT booking_id, status FROM bookings WHERE booking_id = ? FOR UPDATE', [verification.booking_id]);
+    if (!booking) {
+        const err = new Error('The booking this submission is for no longer exists.');
+        err.statusCode = 404;
+        throw err;
+    }
+    if (booking.status !== 'pending') {
+        const err = new Error(`This booking is already ${booking.status} and can't be rejected this way.`);
+        err.statusCode = 409;
+        throw err;
+    }
+
     await connection.query("UPDATE bookings SET status = 'rejected' WHERE booking_id = ?", [verification.booking_id]);
 
     await connection.query(
@@ -261,21 +284,37 @@ const rejectGuestBooking = async (connection, verification, reviewerId, remarks)
     );
 };
 
+// The verification row is locked (SELECT ... FOR UPDATE) and its status
+// re-checked *inside* the transaction, not before it starts — otherwise two
+// concurrent approve/reject requests for the same verification_id (a
+// double-click, a retry, two admin tabs) both pass the "is it still
+// pending?" check before either commits, and both proceed to grant a
+// membership/insert a payment/etc. a second time. Locking the row first
+// means the second request blocks until the first transaction commits, then
+// correctly sees the now-non-pending status and gets a clean 409 instead of
+// silently duplicating the approval.
 const reviewVerification = (status) => async (req, res) => {
     const { id } = req.params;
     const { remarks } = req.body;
 
     try {
-        const verification = await getVerification(id);
-
-        if (!verification) {
-            return res.status(404).json({ message: 'Verification record not found.' });
-        }
-        if (verification.status !== 'pending') {
-            return res.status(409).json({ message: `This verification was already ${verification.status}.` });
-        }
-
         const result = await withTransaction(async (connection) => {
+            const [[verification]] = await connection.query(
+                'SELECT * FROM payment_verification WHERE verification_id = ? FOR UPDATE',
+                [id]
+            );
+
+            if (!verification) {
+                const err = new Error('Verification record not found.');
+                err.statusCode = 404;
+                throw err;
+            }
+            if (verification.status !== 'pending') {
+                const err = new Error(`This verification was already ${verification.status}.`);
+                err.statusCode = 409;
+                throw err;
+            }
+
             if (status === 'approved') {
                 // Settlement is orthogonal to payment_type — a submission
                 // paying off an existing outstanding fee, checked first.
@@ -364,6 +403,14 @@ const editVerification = async (req, res) => {
 // just a status flip, so the database's own FK constraints are the backstop:
 // if the member has since done anything else (bookings, etc.) the delete is
 // rejected and we surface that as a 409 instead of silently failing.
+//
+// Looks the account up via registration_requests.created_user_id (set once,
+// at approval time — see approveRegistration) rather than by re-matching
+// request.username against users.username: usernames are editable after
+// creation (Access Management), so a username-based lookup can silently
+// miss the real account, undo-ing the request's status without actually
+// removing anything, and reopening the door to a duplicate account if it's
+// approved a second time.
 const undoRegistration = async (connection, verification) => {
     const [[request]] = await connection.query(
         'SELECT * FROM registration_requests WHERE request_id = ?',
@@ -377,43 +424,63 @@ const undoRegistration = async (connection, verification) => {
     if (verification.status === 'approved') {
         await connection.query('DELETE FROM payments WHERE verification_id = ?', [verification.verification_id]);
 
-        const [[user]] = await connection.query('SELECT user_id FROM users WHERE username = ?', [request.username]);
-        if (user) {
-            await connection.query('DELETE FROM users WHERE user_id = ?', [user.user_id]);
+        if (request.created_user_id) {
+            await connection.query('DELETE FROM users WHERE user_id = ?', [request.created_user_id]);
         }
     }
 
     await connection.query(
-        "UPDATE registration_requests SET status = 'pending', reviewed_by = NULL, reviewed_at = NULL WHERE request_id = ?",
+        "UPDATE registration_requests SET status = 'pending', reviewed_by = NULL, reviewed_at = NULL, created_user_id = NULL WHERE request_id = ?",
         [request.request_id]
     );
 };
 
+// The verification row is locked and re-checked inside the transaction for
+// the same reason reviewVerification's approve/reject path is — closes the
+// same concurrent-double-action race for undo.
 const undoVerification = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const verification = await getVerification(id);
-
-        if (!verification) {
-            return res.status(404).json({ message: 'Verification record not found.' });
-        }
-        if (verification.status === 'pending') {
-            return res.status(409).json({ message: 'This verification is already pending.' });
-        }
-        // Unlike registration, an approved membership_renewal has no recorded
-        // link back to the exact membership/payment rows it created, so there's
-        // no safe way to reverse the grant here. Resetting this to 'pending'
-        // without reversing it would both leave a stale row that permanently
-        // blocks the member's future renewal submissions, and double-grant the
-        // membership if re-approved.
-        if (verification.payment_type === 'membership_renewal' && verification.status === 'approved') {
-            return res.status(409).json({
-                message: "Cannot undo an approved membership renewal — the granted membership term can't be safely reversed. Adjust the member's membership directly if it needs correcting."
-            });
-        }
-
         await withTransaction(async (connection) => {
+            const [[verification]] = await connection.query(
+                'SELECT * FROM payment_verification WHERE verification_id = ? FOR UPDATE',
+                [id]
+            );
+
+            if (!verification) {
+                const err = new Error('Verification record not found.');
+                err.statusCode = 404;
+                throw err;
+            }
+            if (verification.status === 'pending') {
+                const err = new Error('This verification is already pending.');
+                err.statusCode = 409;
+                throw err;
+            }
+            // Unlike registration, an approved membership_renewal has no recorded
+            // link back to the exact membership/payment rows it created, so there's
+            // no safe way to reverse the grant here. Resetting this to 'pending'
+            // without reversing it would both leave a stale row that permanently
+            // blocks the member's future renewal submissions, and double-grant the
+            // membership if re-approved.
+            if (verification.payment_type === 'membership_renewal' && verification.status === 'approved') {
+                const err = new Error("Cannot undo an approved membership renewal — the granted membership term can't be safely reversed. Adjust the member's membership directly if it needs correcting.");
+                err.statusCode = 409;
+                throw err;
+            }
+            // Same reasoning as membership_renewal: an approved 'booking'
+            // verification means the booking is already confirmed and its
+            // booking_fee payment already completed — there's no automatic
+            // reversal that wouldn't also need a real refund decision.
+            // Without this guard, undo-then-reject could flip an already
+            // paid, confirmed booking straight to 'rejected'.
+            if (verification.payment_type === 'booking' && verification.status === 'approved') {
+                const err = new Error('Cannot undo an approved booking payment — the booking is already confirmed and paid. Cancel the booking directly (and handle any refund) instead.');
+                err.statusCode = 409;
+                throw err;
+            }
+
             if (verification.payment_type === 'registration') {
                 await undoRegistration(connection, verification);
             }
@@ -430,6 +497,9 @@ const undoVerification = async (req, res) => {
             return res.status(409).json({
                 message: "Cannot undo: this member already has other activity recorded (e.g. bookings), so the account can't be removed."
             });
+        }
+        if (err.statusCode) {
+            return res.status(err.statusCode).json({ message: err.message });
         }
         res.status(500).json({ message: 'Failed to undo verification.', error: err.message });
     }

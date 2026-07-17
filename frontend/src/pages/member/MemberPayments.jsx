@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Wallet, Trophy, UserCheck, Receipt, Ban, Heart, CheckCircle2, ExternalLink, UserX } from 'lucide-react';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseErrorMessage } from '../../utils/api';
 import { openUploadedFile } from '../../utils/openUploadedFile';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
@@ -152,8 +152,7 @@ const MemberPayments = () => {
             fetchHistory();
             setTimeout(() => setSuccess(''), 5000);
         } else {
-            const err = await res.json();
-            setError(err.message || 'Failed to submit payment.');
+            setError(await parseErrorMessage(res, 'Failed to submit payment.'));
         }
     };
 

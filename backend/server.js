@@ -5,6 +5,7 @@ require('dotenv').config();
 const pool = require('./config/db');
 const { ensureSchema } = require('./utils/schemaBootstrap');
 const { runNoShowSweep } = require('./utils/noShowSweep');
+const { sweepExpiredGuestLocks } = require('./utils/guestLockSweep');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const memberRoutes = require('./routes/memberRoutes');
@@ -28,18 +29,21 @@ const weatherRoutes = require('./routes/weatherRoutes');
 const logger = require('./middleware/logger');
 
 ensureSchema()
-    .then(() => runNoShowSweep())
+    .then(() => Promise.all([runNoShowSweep(), sweepExpiredGuestLocks()]))
     .catch((err) => console.error('Schema bootstrap failed:', err.message));
 
 // Periodically charges the no-show fee for any confirmed member/coach
-// booking whose time slot has passed with nobody checked in — see
-// utils/noShowSweep.js. No cron dependency in this project, so a plain
-// interval is the simplest fit; every 5 minutes keeps the delay between a
-// slot ending and the fee landing small without hammering the DB.
-const NO_SHOW_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+// booking whose time slot has passed with nobody checked in (see
+// utils/noShowSweep.js), and closes out any guest lock whose 5-minute
+// payment window lapsed without a receipt ever being submitted (see
+// utils/guestLockSweep.js). No cron dependency in this project, so a plain
+// interval is the simplest fit; every 5 minutes keeps both sweeps timely
+// without hammering the DB.
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 setInterval(() => {
     runNoShowSweep().catch((err) => console.error('No-show sweep failed:', err.message));
-}, NO_SHOW_SWEEP_INTERVAL_MS);
+    sweepExpiredGuestLocks().catch((err) => console.error('Guest lock sweep failed:', err.message));
+}, SWEEP_INTERVAL_MS);
 
 const app = express();
 

@@ -4,6 +4,7 @@ import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
 import { apiFetch } from '../../utils/api';
+import { todayISO } from '../../utils/date';
 
 const ROLE_OPTIONS = [
     { value: '', label: 'All Roles' },
@@ -18,8 +19,6 @@ const STATUS_OPTIONS = [
     { value: 'pending', label: 'Pending' },
     { value: 'disabled', label: 'Disabled' },
 ];
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const emptyFormData = () => ({
     username: '', password: '', role: 'member', status: 'active',

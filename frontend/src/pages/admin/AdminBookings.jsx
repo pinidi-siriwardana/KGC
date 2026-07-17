@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { CalendarDays, Filter, Lock, Unlock, XCircle, Ban, CheckCircle2, Pencil, AlertTriangle, RotateCcw } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
+import { todayISO } from '../../utils/date';
+import { useCourtsAndSlots } from '../../hooks/useCourtsAndSlots';
 import CourtSlotGrid from '../../components/booking/CourtSlotGrid';
 import Modal from '../../components/common/Modal';
-
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const emptyCreateForm = () => ({
     booking_type: 'member',
@@ -23,8 +23,7 @@ const STATUS_STYLE = {
 
 const AdminBookings = () => {
     const [selectedDate, setSelectedDate] = useState(todayISO());
-    const [courts, setCourts] = useState([]);
-    const [slots, setSlots] = useState([]);
+    const { courts, slots, error: gridError, retry: retryGrid } = useCourtsAndSlots();
     const [stateMap, setStateMap] = useState({});
     const [members, setMembers] = useState([]);
     const [coaches, setCoaches] = useState([]);
@@ -52,8 +51,6 @@ const AdminBookings = () => {
     const [savingEdit, setSavingEdit] = useState(false);
 
     useEffect(() => {
-        apiFetch('/api/courts').then((res) => res.json()).then((data) => setCourts(data.data || []));
-        apiFetch('/api/time-slots').then((res) => res.json()).then((data) => setSlots(data.data || []));
         apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
         apiFetch('/api/coaches').then((res) => res.json()).then((data) => setCoaches(data.data || []));
         apiFetch('/api/guests').then((res) => res.json()).then((data) => setGuests(Array.isArray(data) ? data : []));
@@ -284,14 +281,26 @@ const AdminBookings = () => {
                     </div>
                 </div>
 
-                <CourtSlotGrid
-                    courts={courts}
-                    slots={slots}
-                    stateMap={stateMap}
-                    onSelectSlot={handleSelectSlot}
-                    selectedKey={pending ? slotKey(pending.court.court_id, pending.slot.slot_id) : null}
-                    selectedDate={selectedDate}
-                />
+                {gridError ? (
+                    <div className="flex flex-col items-center gap-3 py-10 text-center">
+                        <p className="text-red-600 text-sm font-medium">{gridError}</p>
+                        <button
+                            type="button" onClick={retryGrid}
+                            className="text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:underline"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                ) : (
+                    <CourtSlotGrid
+                        courts={courts}
+                        slots={slots}
+                        stateMap={stateMap}
+                        onSelectSlot={handleSelectSlot}
+                        selectedKey={pending ? slotKey(pending.court.court_id, pending.slot.slot_id) : null}
+                        selectedDate={selectedDate}
+                    />
+                )}
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">

@@ -8,8 +8,15 @@ const KANDY_COORDS = { latitude: 7.2906, longitude: 80.6337 };
 // runs as multiple instances, move this to a DB-backed cache instead.
 let cache = { date: null, data: null };
 
+// Fixed +5:30 offset rather than `new Date().toISOString()` (always UTC) —
+// the forecast itself is already requested in Asia/Colombo time below, so
+// the cache key should roll over at Colombo's local midnight too, not at
+// UTC midnight (5:30am local), which would otherwise serve a stale cached
+// forecast for the first ~5.5 hours of every real day.
+const SRI_LANKA_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 const fetchTodayForecast = async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(Date.now() + SRI_LANKA_OFFSET_MS).toISOString().slice(0, 10);
     if (cache.date === today && cache.data) return cache.data;
 
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${KANDY_COORDS.latitude}&longitude=${KANDY_COORDS.longitude}` +
