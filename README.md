@@ -14,6 +14,7 @@ This repo's docs are split by concern rather than crammed into one file:
 |---|---|
 | [`PROJECT_OVERVIEW.md`](./PROJECT_OVERVIEW.md) | Start here if you're new — purpose, architecture, entry points, key components, data flow, and the gotchas worth knowing before changing something. |
 | [`DB.md`](./DB.md) | Full database schema — every table, column, key, and foreign key, generated from the live database. |
+| [`backend/schema.sql`](./backend/schema.sql) | The runnable version of `DB.md` — `CREATE TABLE` statements plus reference-data seed (courts, time slots, membership plans, club settings) to bootstrap a fresh database. |
 | [`API.md`](./API.md) | Every backend endpoint — method, path, required role, one-line description. |
 | [`API_DESIGN.md`](./API_DESIGN.md) | A handful of representative endpoints spelled out in full — request/response body shapes and status codes — as a template for the rest. |
 | [`design.md`](./design.md) | The "Heritage Elite" design system — color tokens, type scale, spacing, and component patterns used across the frontend. |
@@ -24,7 +25,15 @@ You'll need Node.js and a running MySQL/MariaDB instance.
 
 ### 1. Database
 
-Create an empty database — the schema builds itself. There's no migration tool or seed script to run; `backend/utils/schemaBootstrap.js` creates every table/column it needs the first time the server boots.
+Create an empty database, then load the base schema from [`backend/schema.sql`](./backend/schema.sql):
+
+```bash
+mysql -u your_db_user -p kandy_garden_club_db < backend/schema.sql
+```
+
+That's the actual `CREATE TABLE` DDL (verified against the live database, not hand-transcribed from docs), in foreign-key-safe order, plus the reference/lookup data the app needs to be usable out of the box — courts, time slots, membership plans, and club settings. It does **not** include any member/coach/booking/payment data — that's real per-deployment data, not schema, and isn't seeded.
+
+There's no migration tool beyond this: `backend/utils/schemaBootstrap.js` runs automatically on every server boot and self-heals anything added *since* this file was generated (additive `ALTER TABLE` statements, plus a couple of tables it creates outright via `CREATE TABLE IF NOT EXISTS`). Everything in `schema.sql` already reflects the current state, so on a fresh load those checks are all no-ops — confirmed by running `ensureSchema()` against a database built from this exact file.
 
 ### 2. Backend
 
@@ -57,7 +66,7 @@ SMTP_PASS=
 node server.js
 ```
 
-You should see `🚀 Server running on port 5000` and `✅ Connected to MariaDB/MySQL database successfully.` — the schema self-heals on this first boot, so no separate setup step is needed.
+You should see `🚀 Server running on port 5000` and `✅ Connected to MariaDB/MySQL database successfully.`
 
 ### 3. Frontend
 
