@@ -1,32 +1,36 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Settings, Hammer, CheckCircle, Activity, Camera, Loader2 } from 'lucide-react';
+import { Trophy, Activity, Camera, Loader2, CalendarClock } from 'lucide-react';
 import SearchInput from '../../components/common/SearchInput';
-import FilterSelect from '../../components/common/FilterSelect';
+import Modal from '../../components/common/Modal';
 import { apiFetch, API_URL, parseErrorMessage } from '../../utils/api';
-
-const STATUS_OPTIONS = [
-  { value: '', label: 'All Statuses' },
-  { value: 'available', label: 'Available' },
-  { value: 'maintenance', label: 'Maintenance' },
-];
+import { todayISO } from '../../utils/date';
 
 const AdminCourts = () => {
   const [courts, setCourts] = useState([]);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState(null);
   const [photoErrors, setPhotoErrors] = useState({});
-  const [statusErrors, setStatusErrors] = useState({});
   const [brokenPhotos, setBrokenPhotos] = useState({});
+
+  // Scheduled maintenance window — blocks out specific date+slot cells (via
+  // a 'maintenance' booking_type row, same occupancy mechanism real
+  // bookings use) rather than closing the whole court indefinitely. This is
+  // the only maintenance mechanism now — there's no whole-court toggle.
+  const [timeSlots, setTimeSlots] = useState([]);
+  const [schedulingCourt, setSchedulingCourt] = useState(null);
+  const [maintDate, setMaintDate] = useState(todayISO());
+  const [maintSlots, setMaintSlots] = useState([]);
+  const [daySlotStates, setDaySlotStates] = useState({});
+  const [maintBookingIds, setMaintBookingIds] = useState({});
+  const [loadingDayStates, setLoadingDayStates] = useState(false);
+  const [maintError, setMaintError] = useState('');
+  const [savingMaint, setSavingMaint] = useState(false);
+  const [undoingSlot, setUndoingSlot] = useState(null);
 
   const filteredCourts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return courts.filter((c) => {
-      const matchesSearch = !q || [c.court_name, c.court_type].some((v) => v?.toLowerCase().includes(q));
-      const matchesStatus = !statusFilter || c.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [courts, search, statusFilter]);
+    return courts.filter((c) => !q || [c.court_name, c.court_type].some((v) => v?.toLowerCase().includes(q)));
+  }, [courts, search]);
 
   // Fetch initial court data from our new API
   useEffect(() => {
@@ -34,7 +38,106 @@ const AdminCourts = () => {
       .then(res => res.json())
       .then(res => setCourts(res.data))
       .catch(err => console.error("Error loading courts:", err));
+    apiFetch('/api/time-slots')
+      .then(res => res.json())
+      .then(res => setTimeSlots(res.data || []))
+      .catch(err => console.error("Error loading time slots:", err));
   }, []);
+
+  // Which of this court's slots are already taken on the chosen date, so the
+  // picker below can't let an admin select one that's already booked/locked
+  // — same occupancy data the booking grid itself uses — plus, separately,
+  // the actual booking_id behind any already-scheduled maintenance slot, so
+  // that one can be cancelled (undone) straight from the same picker.
+  const fetchDayStates = (court_id, date) => {
+    setLoadingDayStates(true);
+    Promise.all([
+      apiFetch(`/api/bookings/availability?date=${date}`).then((res) => res.json()),
+      apiFetch(`/api/bookings?court_id=${court_id}&date=${date}&booking_type=maintenance&status=confirmed`).then((res) => res.json()),
+    ])
+      .then(([availability, maintenance]) => {
+        const states = {};
+        (availability.data || []).forEach((row) => {
+          if (row.court_id === court_id) states[row.slot_id] = row.state;
+        });
+        setDaySlotStates(states);
+
+        const ids = {};
+        (maintenance.data || []).forEach((row) => { ids[row.slot_id] = row.booking_id; });
+        setMaintBookingIds(ids);
+      })
+      .catch(() => { setDaySlotStates({}); setMaintBookingIds({}); })
+      .finally(() => setLoadingDayStates(false));
+  };
+
+  const handleOpenScheduleMaintenance = (court) => {
+    setSchedulingCourt(court);
+    setMaintDate(todayISO());
+    setMaintSlots([]);
+    setMaintError('');
+    fetchDayStates(court.court_id, todayISO());
+  };
+
+  const handleMaintDateChange = (date) => {
+    setMaintDate(date);
+    setMaintSlots([]);
+    setMaintError('');
+    if (schedulingCourt) fetchDayStates(schedulingCourt.court_id, date);
+  };
+
+  const toggleMaintSlot = (slot_id) => {
+    setMaintSlots((prev) => (prev.includes(slot_id) ? prev.filter((id) => id !== slot_id) : [...prev, slot_id]));
+  };
+
+  // Undoes a previously-scheduled maintenance slot — reuses the same
+  // generic admin cancel action every other booking type already uses
+  // (PATCH /:id, action: 'cancel'), since a maintenance row is just a
+  // 'confirmed' booking like any other and needs no special-casing there.
+  const handleUndoMaintenance = async (slot) => {
+    const booking_id = maintBookingIds[slot.slot_id];
+    if (!booking_id) return;
+    if (!window.confirm(`Cancel the scheduled maintenance for ${slot.slot_name} on ${maintDate}?`)) return;
+
+    setUndoingSlot(slot.slot_id);
+    const res = await apiFetch(`/api/bookings/${booking_id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'cancel' }),
+    });
+    setUndoingSlot(null);
+
+    if (res.ok) {
+      fetchDayStates(schedulingCourt.court_id, maintDate);
+    } else {
+      setMaintError(await parseErrorMessage(res, 'Failed to cancel maintenance.'));
+    }
+  };
+
+  const handleScheduleMaintenance = async (e) => {
+    e.preventDefault();
+    if (maintSlots.length === 0) {
+      setMaintError('Select at least one time slot.');
+      return;
+    }
+    setSavingMaint(true);
+    setMaintError('');
+
+    const res = await apiFetch('/api/bookings/maintenance', {
+      method: 'POST',
+      body: JSON.stringify({ court_id: schedulingCourt.court_id, booking_date: maintDate, slot_ids: maintSlots }),
+    });
+    setSavingMaint(false);
+
+    if (res.ok) {
+      setSchedulingCourt(null);
+    } else {
+      const message = await parseErrorMessage(res, 'Failed to schedule maintenance.');
+      setMaintError(message);
+      // A conflict means someone else booked one of these slots since the
+      // picker last loaded — refresh so the now-stale "available" cell
+      // shows its real state instead of letting the admin retry blind.
+      fetchDayStates(schedulingCourt.court_id, maintDate);
+    }
+  };
 
   // Uploads immediately on file select, same pattern as the coach photo
   // upload — no add/edit form exists for courts, so this is its own
@@ -60,27 +163,6 @@ const AdminCourts = () => {
     }
   };
 
-  // Handle status toggle (Available vs Maintenance)
-  const handleStatusToggle = async (id, currentStatus) => {
-    const newStatus = currentStatus === 'available' ? 'maintenance' : 'available';
-    setStatusErrors((e) => ({ ...e, [id]: '' }));
-
-    const res = await apiFetch(`/api/courts/status/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ status: newStatus })
-    });
-
-    if (res.ok) {
-      // Optimistic UI update
-      setCourts(courts.map(court =>
-        court.court_id === id ? { ...court, status: newStatus } : court
-      ));
-    } else {
-      const message = await parseErrorMessage(res, 'Failed to update court status.');
-      setStatusErrors((e) => ({ ...e, [id]: message }));
-    }
-  };
-
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
       {/* Header Section */}
@@ -90,7 +172,6 @@ const AdminCourts = () => {
           <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">KGC Facility Overview</p>
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUS_OPTIONS} />
           <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search courts..." className="w-full sm:w-56" />
           <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded-full uppercase border border-blue-100 flex items-center gap-2 whitespace-nowrap">
             <Activity size={12} /> {courts.length} Registered Tracks
@@ -104,7 +185,6 @@ const AdminCourts = () => {
             <tr className="text-slate-400 text-[9px] uppercase tracking-widest bg-slate-50/50">
               <th className="p-4 font-black">Resource Name</th>
               <th className="p-4 font-black">Surface Type</th>
-              <th className="p-4 font-black">Current Status</th>
               <th className="p-4 font-black text-right">Operational Control</th>
             </tr>
           </thead>
@@ -123,7 +203,7 @@ const AdminCourts = () => {
                       />
                     ) : (
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-colors ${
-                        court.status === 'available'
+                        court.is_active
                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                         : 'bg-slate-100 text-slate-400 border-slate-200'
                       }`}>
@@ -147,39 +227,17 @@ const AdminCourts = () => {
                    </span>
                 </td>
 
-                {/* Status column */}
-                <td className="p-4">
-                  {court.status === 'available' ? (
-                    <div className="flex items-center gap-2 text-emerald-600">
-                      <CheckCircle size={14} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Available</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-amber-600">
-                      <Hammer size={14} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Maintenance</span>
-                    </div>
-                  )}
-                  {statusErrors[court.court_id] && (
-                    <p className="text-[9px] text-red-500 font-bold mt-1">{statusErrors[court.court_id]}</p>
-                  )}
-                </td>
-
                 {/* Actions column */}
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-2 group-hover:translate-x-0 transition-all duration-300">
-                    <button 
-                      onClick={() => handleStatusToggle(court.court_id, court.status)}
-                      title={court.status === 'available' ? "Move to Maintenance" : "Make Available"}
-                      className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all border ${
-                        court.status === 'available' 
-                        ? 'text-amber-600 bg-amber-50 border-amber-100 hover:bg-amber-600 hover:text-white' 
-                        : 'text-emerald-600 bg-emerald-50 border-emerald-100 hover:bg-emerald-600 hover:text-white'
-                      }`}
+                    <button
+                      onClick={() => handleOpenScheduleMaintenance(court)}
+                      title="Schedule Maintenance Window"
+                      className="w-10 h-10 flex items-center justify-center rounded-xl transition-all border text-blue-600 bg-blue-50 border-blue-100 hover:bg-blue-600 hover:text-white"
                     >
-                      {court.status === 'available' ? <Settings size={18} /> : <CheckCircle size={18} />}
+                      <CalendarClock size={18} />
                     </button>
-                    
+
                     <label
                       title={court.photo_url ? 'Change Photo' : 'Upload Photo'}
                       className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all border cursor-pointer ${
@@ -206,10 +264,80 @@ const AdminCourts = () => {
 
         {filteredCourts.length === 0 && (
           <div className="p-20 text-center italic text-slate-300 text-xs tracking-[0.2em] uppercase font-medium">
-            {courts.length === 0 ? 'No court data found in system registry.' : 'No courts match these filters.'}
+            {courts.length === 0 ? 'No court data found in system registry.' : 'No courts match this search.'}
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={!!schedulingCourt}
+        onClose={() => setSchedulingCourt(null)}
+        title={`Schedule Maintenance — ${schedulingCourt?.court_name || ''}`}
+        submitText={savingMaint ? 'Scheduling...' : `Schedule (${maintSlots.length} Slot${maintSlots.length === 1 ? '' : 's'})`}
+        onSubmit={handleScheduleMaintenance}
+      >
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Date</label>
+            <input
+              type="date"
+              min={todayISO()}
+              value={maintDate}
+              onChange={(e) => handleMaintDateChange(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-1">
+              Time Slots — select every slot this window covers, or tap an existing maintenance slot to undo it
+            </label>
+            {loadingDayStates ? (
+              <p className="text-slate-400 text-xs py-6 text-center">Loading availability...</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto border border-slate-200 rounded-xl p-2">
+                {timeSlots.map((slot) => {
+                  const state = daySlotStates[slot.slot_id] || 'available';
+                  const isFree = state === 'available';
+                  const isMaintenance = state === 'maintenance' && maintBookingIds[slot.slot_id];
+                  const isLocked = !isFree && !isMaintenance;
+                  const isSelected = maintSlots.includes(slot.slot_id);
+                  const isUndoing = undoingSlot === slot.slot_id;
+
+                  return (
+                    <button
+                      type="button"
+                      key={slot.slot_id}
+                      disabled={isLocked || isUndoing}
+                      onClick={() => (isMaintenance ? handleUndoMaintenance(slot) : toggleMaintSlot(slot.slot_id))}
+                      title={isMaintenance ? 'Tap to undo this scheduled maintenance' : undefined}
+                      className={`px-3 py-2 rounded-lg text-[10px] font-bold text-left transition-colors ${
+                        isSelected
+                          ? 'bg-slate-900 text-white'
+                          : isMaintenance
+                            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 cursor-pointer'
+                            : isLocked
+                              ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      }`}
+                    >
+                      {slot.slot_name}
+                      {isMaintenance && (
+                        <span className="block text-[8px] uppercase opacity-70">{isUndoing ? 'Cancelling...' : 'Maintenance — tap to undo'}</span>
+                      )}
+                      {isLocked && <span className="block text-[8px] uppercase opacity-70">{state}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {maintError && (
+            <p className="text-red-500 text-[11px] font-bold">{maintError}</p>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

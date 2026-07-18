@@ -34,7 +34,8 @@ const DARK_TEXT = { header: 'text-white/40', headerCourt: 'text-white/60', heade
 // surface — guest (public), member, coach, and admin all use the exact same
 // component with the exact same rules, no per-role exceptions. States:
 // available / locked (someone else mid-checkout) / booked (confirmed) /
-// maintenance (court itself unavailable) / past (today's slot has fully
+// maintenance (either this specific slot has a scheduled maintenance block,
+// via stateMap, or the whole court is deactivated) / past (today's slot has fully
 // elapsed — not reflected in stateMap since it never got a bookings row, so
 // it's derived here from selectedDate + the slot's own end_time). A slot
 // stays bookable for whatever's left of its duration — e.g. at 1:30, the
@@ -80,7 +81,7 @@ const CourtSlotGrid = ({ courts, slots, stateMap, onSelectSlot, selectedKey, dar
                             </td>
                             {courts.map((court) => {
                                 const key = slotKey(court.court_id, slot.slot_id);
-                                const courtUnavailable = court.status !== 'available' || !court.is_active;
+                                const courtUnavailable = !court.is_active;
                                 const isPast = isToday && slot.end_time && slot.end_time <= nowTime;
                                 const state = courtUnavailable ? 'maintenance' : isPast ? 'past' : (stateMap[key] || 'available');
                                 const isSelected = selectedKey === key;

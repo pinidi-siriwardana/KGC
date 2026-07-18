@@ -139,6 +139,19 @@ const ensureCourtsSchema = async () => {
     }
 };
 
+// courts.status ('available'/'maintenance') was retired — maintenance is
+// scheduled per date+slot now (bookings.booking_type = 'maintenance', see
+// createMaintenanceBlock), not toggled whole-court-indefinitely. Every court
+// availability check now looks at is_active alone. One-time, idempotent:
+// no-op on any install past its first run after this change.
+const retireCourtStatus = async () => {
+    try {
+        await pool.query('ALTER TABLE courts DROP COLUMN status');
+    } catch (err) {
+        if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY' && err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+    }
+};
+
 // club_settings is a generic key-value store (already holds bank details and
 // fee amounts) — these are the club-identity keys the public site's
 // Contact/footer sections read, seeded once so the new admin Club Settings
@@ -214,6 +227,17 @@ const ensureBookingsSchema = async () => {
     } catch (err) {
         ignoreIfAlreadyApplied(err);
     }
+
+    // booking_type = 'maintenance': an admin-scheduled block on a specific
+    // court+date+slot, e.g. resurfacing or repairs. Reuses the exact same
+    // occupancy machinery real bookings use (status='confirmed' + the
+    // active_slot_key/unique_active_court_slot guard above), so a
+    // maintenance block shows in every booking grid and blocks/gets blocked
+    // by a real booking through the same mechanism — no separate table, no
+    // separate conflict-checking code. MODIFY COLUMN is naturally idempotent
+    // (re-running it against the same enum is a no-op), so this needs no
+    // try/catch guard like the ADD COLUMN statements above.
+    await pool.query("ALTER TABLE bookings MODIFY COLUMN booking_type ENUM('member', 'guest', 'coach', 'maintenance') NOT NULL");
 };
 
 // registration_requests.created_user_id: a stable back-reference to the
@@ -256,6 +280,7 @@ const ensureSchema = async () => {
     await backfillAdminStaffRecords();
     await ensureCoachesSchema();
     await ensureCourtsSchema();
+    await retireCourtStatus();
     await ensureClubIdentitySettings();
     await ensureBookingsSchema();
     await ensureRegistrationRequestsSchema();

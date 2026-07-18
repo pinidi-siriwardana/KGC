@@ -5,7 +5,7 @@ import { API_URL } from '../../utils/api';
 const CourtCard = ({ court }) => {
   const [imageBroken, setImageBroken] = useState(false);
   const image = court.photo_url ? `${API_URL}${court.photo_url}` : null;
-  const isAvailable = court.status === 'available';
+  const isAvailable = !!court.is_active;
 
   return (
     <div className="group relative h-[550px] lg:h-[650px] rounded-club overflow-hidden transition-all duration-1000 bg-obsidian border border-obsidian/5 shadow-xl shadow-obsidian/5">
@@ -36,7 +36,7 @@ const CourtCard = ({ court }) => {
         ) : (
           <div className="bg-amber text-obsidian px-5 py-2 rounded-full flex items-center gap-2 shadow-xl border border-white/20">
             <Hammer size={12} />
-            <span className="text-[9px] font-black uppercase tracking-registry">Maintenance</span>
+            <span className="text-[9px] font-black uppercase tracking-registry">Unavailable</span>
           </div>
         )}
       </div>
@@ -137,7 +137,7 @@ const CourtGallery = () => {
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-registry text-muted mb-1">Live Status</p>
-              <p className="text-[11px] font-black text-obsidian uppercase tracking-[0.2em]">{courts.filter((c) => c.status === 'available').length} of {courts.length} Available</p>
+              <p className="text-[11px] font-black text-obsidian uppercase tracking-[0.2em]">{courts.filter((c) => c.is_active).length} of {courts.length} Available</p>
             </div>
           </div>
         </div>

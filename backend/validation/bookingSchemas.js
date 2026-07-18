@@ -22,6 +22,7 @@ const getBookingsQuerySchema = z.object({
     date: dateString.optional(),
     status: z.enum(['pending', 'confirmed', 'rejected', 'cancelled']).optional(),
     court_id: z.coerce.number().int().positive().optional(),
+    booking_type: z.enum(['member', 'guest', 'coach', 'maintenance']).optional(),
 });
 
 // Public: lets the guest-booking widget check if a phone/email matches an
@@ -63,6 +64,18 @@ const createBookingSchema = z.object({
     booking_date: dateString,
 }).passthrough();
 
+// Admin-only: block a court out for maintenance across one or more of a
+// single date's time slots. Unlike createGuestLockSchema's date check, past
+// dates are rejected here unconditionally (no admin-backfill exemption —
+// there's no reason to ever schedule maintenance for a date that's already
+// gone).
+const createMaintenanceSchema = z.object({
+    court_id: z.coerce.number().int().positive('court_id is required'),
+    booking_date: dateString.refine((d) => d >= todayISO(), 'Cannot schedule maintenance for a date in the past.'),
+    slot_ids: z.array(z.coerce.number().int().positive())
+        .min(1, 'Select at least one time slot.'),
+});
+
 const updateBookingStatusSchema = z.object({
     action: z.enum(['cancel', 'reject', 'lock', 'unlock', 'restore'], {
         error: "action must be 'cancel', 'reject', 'lock', 'unlock' or 'restore'.",
@@ -83,6 +96,7 @@ module.exports = {
     lookupGuestQuerySchema,
     createGuestLockSchema,
     createBookingSchema,
+    createMaintenanceSchema,
     updateBookingStatusSchema,
     updateBookingDetailsSchema,
 };

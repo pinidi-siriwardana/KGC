@@ -26,7 +26,8 @@ const requireActiveMembership = async (member_id, byAdmin) => {
 
 const BOOKING_SELECT = `
     SELECT b.*, c.court_name, c.court_type, ts.slot_name, ts.start_time, ts.end_time,
-           COALESCE(m.full_name, co.full_name, g.full_name) AS payer_name
+           COALESCE(m.full_name, co.full_name, g.full_name,
+                     CASE WHEN b.booking_type = 'maintenance' THEN 'Court Maintenance' END) AS payer_name
     FROM bookings b
     JOIN courts c ON b.court_id = c.court_id
     JOIN time_slots ts ON b.slot_id = ts.slot_id
@@ -56,7 +57,11 @@ const getAvailability = async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT court_id, slot_id,
-                    CASE WHEN status = 'confirmed' THEN 'booked' ELSE 'locked' END AS state
+                    CASE
+                        WHEN booking_type = 'maintenance' THEN 'maintenance'
+                        WHEN status = 'confirmed' THEN 'booked'
+                        ELSE 'locked'
+                    END AS state
              FROM bookings
              WHERE booking_date = ?
                AND (status = 'confirmed' OR (status = 'pending' AND (lock_expires_at IS NULL OR lock_expires_at > NOW())))`,
@@ -92,9 +97,9 @@ const createGuestLock = async (req, res) => {
 
     try {
         const data = await withTransaction(async (connection) => {
-            const [[court]] = await connection.query('SELECT status, is_active FROM courts WHERE court_id = ?', [court_id]);
+            const [[court]] = await connection.query('SELECT is_active FROM courts WHERE court_id = ?', [court_id]);
             if (!court) notFound('Court not found.');
-            if (!court.is_active || court.status !== 'available') conflict('This court is not available for booking.');
+            if (!court.is_active) conflict('This court is not available for booking.');
 
             // Guest bookings are never admin-initiated, so unlike createBooking
             // this check always applies — no exemption to consider. The date
@@ -273,7 +278,7 @@ const submitGuestPayment = async (req, res) => {
 };
 
 const getBookings = async (req, res) => {
-    const { date, status, court_id } = req.query;
+    const { date, status, court_id, booking_type } = req.query;
     const conditions = [];
     const values = [];
 
@@ -288,6 +293,7 @@ const getBookings = async (req, res) => {
         if (date) { conditions.push('b.booking_date = ?'); values.push(date); }
         if (status) { conditions.push('b.status = ?'); values.push(status); }
         if (court_id) { conditions.push('b.court_id = ?'); values.push(court_id); }
+        if (booking_type) { conditions.push('b.booking_type = ?'); values.push(booking_type); }
 
         const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
         const [rows] = await pool.query(
@@ -372,9 +378,9 @@ const createBooking = async (req, res) => {
                 }
             }
 
-            const [[court]] = await connection.query('SELECT status, is_active FROM courts WHERE court_id = ?', [court_id]);
+            const [[court]] = await connection.query('SELECT is_active FROM courts WHERE court_id = ?', [court_id]);
             if (!court) notFound('Court not found.');
-            if (!court.is_active || court.status !== 'available') conflict('This court is not available for booking.');
+            if (!court.is_active) conflict('This court is not available for booking.');
 
             // date_in_past/slot_in_past are computed against MySQL's own
             // CURDATE()/CURTIME() rather than Node's clock, so this can't
@@ -460,6 +466,77 @@ const createBooking = async (req, res) => {
         if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'This slot is already booked.' });
         if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
         res.status(500).json({ message: 'Failed to create booking.', error: err.message });
+    }
+};
+
+// Admin-only: blocks a court out for maintenance across one or more slots on
+// a single date. Deliberately its own endpoint rather than another
+// booking_type option on createBooking — maintenance has none of the
+// member/coach/guest identity fields or fee logic that function's admin
+// branch is built around, and folding it in there would mean threading a
+// "which of 4 mutually-exclusive shapes is this" check through code that's
+// already sequential/transactional. Whole request is atomic: if any
+// requested slot is already occupied, the entire block is rejected and
+// nothing is inserted, rather than partially scheduling around the
+// conflict — matches how the user described it ("cannot switch the court to
+// maintenance when there's a booking already").
+const createMaintenanceBlock = async (req, res) => {
+    const { court_id, booking_date, slot_ids } = req.body;
+
+    try {
+        const bookingIds = await withTransaction(async (connection) => {
+            const [[court]] = await connection.query('SELECT is_active FROM courts WHERE court_id = ?', [court_id]);
+            if (!court) notFound('Court not found.');
+
+            const inserted = [];
+            for (const slot_id of slot_ids) {
+                const [[slot]] = await connection.query(
+                    `SELECT slot_id, slot_name,
+                            (? = CURDATE() AND end_time <= CURTIME()) AS slot_in_past
+                     FROM time_slots WHERE slot_id = ?`,
+                    [booking_date, slot_id]
+                );
+                if (!slot) notFound(`Time slot ${slot_id} not found.`);
+                if (slot.slot_in_past) badRequest(`${slot.slot_name} has already ended and can no longer be scheduled for maintenance.`);
+
+                // Same locking-read pattern createBooking uses just above —
+                // scoped to the one active (pending/confirmed) row this slot
+                // can have, so a stale cancelled row can never mask a real
+                // conflict here.
+                const [[existing]] = await connection.query(
+                    `SELECT booking_id, status, lock_expires_at FROM bookings
+                     WHERE court_id = ? AND booking_date = ? AND slot_id = ? AND status IN ('pending', 'confirmed') FOR UPDATE`,
+                    [court_id, booking_date, slot_id]
+                );
+                const stillOccupied = existing && (existing.status === 'confirmed' ||
+                    (existing.status === 'pending' && (existing.lock_expires_at === null || new Date(existing.lock_expires_at) > new Date())));
+
+                if (stillOccupied) {
+                    conflict(`${slot.slot_name} on ${booking_date} already has a booking — cannot schedule maintenance for that time.`);
+                }
+                if (existing && existing.status === 'pending') {
+                    await connection.query("UPDATE bookings SET status = 'cancelled' WHERE booking_id = ?", [existing.booking_id]);
+                }
+
+                const [insertResult] = await connection.query(
+                    `INSERT INTO bookings (court_id, slot_id, booking_date, booking_type, amount_charged, status, lock_status, created_by_user_id)
+                     VALUES (?, ?, ?, 'maintenance', 0, 'confirmed', 'unlocked', ?)`,
+                    [court_id, slot_id, booking_date, req.user.user_id]
+                );
+                inserted.push(insertResult.insertId);
+            }
+
+            return inserted;
+        });
+
+        res.status(201).json({
+            message: `Maintenance scheduled for ${bookingIds.length} time slot${bookingIds.length === 1 ? '' : 's'} on ${booking_date}.`,
+            booking_ids: bookingIds,
+        });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'One of these time slots was just booked — cannot schedule maintenance for it.' });
+        if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
+        res.status(500).json({ message: 'Failed to schedule maintenance.', error: err.message });
     }
 };
 
@@ -633,6 +710,6 @@ const updateBookingDetails = async (req, res) => {
 };
 
 module.exports = {
-    getAvailability, getBookings, createBooking, updateBookingStatus, updateBookingDetails,
+    getAvailability, getBookings, createBooking, createMaintenanceBlock, updateBookingStatus, updateBookingDetails,
     lookupGuest, createGuestLock, submitGuestPayment,
 };

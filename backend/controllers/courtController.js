@@ -11,23 +11,6 @@ const getAllCourts = async (req, res) => {
     }
 };
 
-const updateCourtStatus = async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    try {
-        const [result] = await pool.query('UPDATE courts SET status = ? WHERE court_id = ?', [status, id]);
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Court not found.' });
-        }
-
-        res.json({ message: 'Court status updated.' });
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to update court status.', error: err.message });
-    }
-};
-
 // Admin: replaces a court's photo, shown in the public court gallery. The
 // old file (if any) is deleted from disk once the new one is saved, so
 // switching photos repeatedly doesn't leave orphaned files behind.
@@ -64,4 +47,4 @@ const updateCourtPhoto = async (req, res) => {
     }
 };
 
-module.exports = { getAllCourts, updateCourtStatus, updateCourtPhoto };
+module.exports = { getAllCourts, updateCourtPhoto };

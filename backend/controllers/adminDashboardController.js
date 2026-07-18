@@ -14,6 +14,7 @@ const fetchRecentActivity = async () => {
          LEFT JOIN members m ON b.member_id = m.member_id
          LEFT JOIN coaches co ON b.coach_id = co.coach_id
          LEFT JOIN guests g ON b.guest_id = g.guest_id
+         WHERE b.booking_type != 'maintenance'
          ORDER BY b.created_at DESC LIMIT 5`
     );
 
@@ -134,8 +135,8 @@ const getDashboardOverview = async (req, res) => {
             pool.query(`SELECT COUNT(*) AS total, SUM(status = 'active') AS active FROM members`),
             pool.query(`SELECT SUM(status = 'active') AS active FROM coaches`),
             pool.query(`SELECT COUNT(*) AS count FROM payment_verification WHERE status = 'pending'`),
-            pool.query(`SELECT COUNT(*) AS count FROM bookings WHERE booking_date = CURDATE() AND status IN ('pending', 'confirmed')`),
-            pool.query(`SELECT COUNT(*) AS total, SUM(status = 'available' AND is_active = 1) AS available FROM courts`),
+            pool.query(`SELECT COUNT(*) AS count FROM bookings WHERE booking_date = CURDATE() AND status IN ('pending', 'confirmed') AND booking_type != 'maintenance'`),
+            pool.query(`SELECT COUNT(*) AS total, SUM(is_active = 1) AS available FROM courts`),
             pool.query(`SELECT COUNT(*) AS count FROM contact_inquiries WHERE status = 'unread' AND is_deleted = 0`),
             pool.query(`SELECT COUNT(*) AS count FROM attendance WHERE checkout_time IS NULL`),
             fetchRecentActivity(),
