@@ -171,6 +171,7 @@ const AdminStaff = () => {
                                             <div>
                                                 <p className="text-slate-900 text-sm font-bold">{s.full_name}</p>
                                                 {s.position && <p className="text-[10px] text-slate-400">{s.position}</p>}
+                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">UID: S-00{s.staff_id}</p>
                                             </div>
                                         </div>
                                     </td>

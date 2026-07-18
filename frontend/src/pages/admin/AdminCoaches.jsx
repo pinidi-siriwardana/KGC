@@ -167,6 +167,7 @@ const AdminCoaches = () => {
                                             <div>
                                                 <p className="text-slate-900 text-sm font-bold">{coach.full_name}</p>
                                                 <p className="text-[10px] text-slate-400 font-medium">{coach.email}</p>
+                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">UID: C-00{coach.coach_id}</p>
                                             </div>
                                         </div>
                                     </td>

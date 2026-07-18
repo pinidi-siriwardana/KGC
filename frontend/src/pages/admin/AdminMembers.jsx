@@ -143,7 +143,10 @@ const AdminMembers = () => {
                   <td className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500"><User size={16} /></div>
-                      <p className="text-slate-900 text-sm font-bold">{m.full_name}</p>
+                      <div>
+                        <p className="text-slate-900 text-sm font-bold">{m.full_name}</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">UID: M-00{m.member_id}</p>
+                      </div>
                     </div>
                   </td>
                   <td className="p-4">

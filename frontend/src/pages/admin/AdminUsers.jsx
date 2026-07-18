@@ -219,6 +219,7 @@ const AdminUsers = () => {
                                                         <span className="ml-2 text-[8px] font-black uppercase text-emerald-600 align-middle">You</span>
                                                     )}
                                                 </p>
+                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">UID: {u.role === 'admin' ? 'A' : 'U'}-00{u.user_id}</p>
                                                 {u.has_profile === false && (
                                                     <p className="flex items-center gap-1 text-[9px] font-black uppercase text-amber-600 mt-0.5">
                                                         <AlertTriangle size={10} /> Missing {u.role} profile — hidden from directory
