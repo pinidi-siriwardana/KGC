@@ -48,7 +48,9 @@ const approveRegistration = async (connection, verification, reviewerId, remarks
     );
 
     if (!request) {
-        throw new Error('Linked registration request not found.');
+        const err = new Error('Linked registration request not found.');
+        err.statusCode = 404;
+        throw err;
     }
     if (request.status !== 'pending') {
         const err = new Error('This registration has already been reviewed.');
@@ -115,8 +117,10 @@ const rejectRegistration = async (connection, verification, reviewerId, remarks)
     );
 };
 
-// Booking/membership-renewal/other verifications don't have a cascade workflow
-// built yet (see TODO.md) — they just get their status recorded.
+// Reject-only fallback now — every approvable payment_type has its own named
+// handler below (see the dispatch table in reviewVerification), so this only
+// ever runs for a rejection, where there's nothing to reverse and just
+// recording the decision is correct and complete.
 const reviewOther = async (connection, status, verification, reviewerId, remarks) => {
     await connection.query(
         'UPDATE payment_verification SET status = ?, reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE verification_id = ?',
@@ -129,7 +133,11 @@ const reviewOther = async (connection, status, verification, reviewerId, remarks
 // it's already expired, otherwise extends from the current end_date so an
 // early renewal doesn't forfeit already-paid-for time.
 const approveMembershipRenewal = async (connection, verification, reviewerId, remarks) => {
-    if (!verification.member_id) throw new Error('This verification has no linked member.');
+    if (!verification.member_id) {
+        const err = new Error('This verification has no linked member.');
+        err.statusCode = 400;
+        throw err;
+    }
 
     const [[membershipType]] = await connection.query(
         'SELECT duration_months, price FROM membership_types WHERE membership_type_id = ?',
@@ -175,11 +183,17 @@ const approveMembershipRenewal = async (connection, verification, reviewerId, re
     );
 };
 
-// Donation / tournament fee: just logs the payment against whichever of
-// member/coach submitted it, no further cascade.
+// Every remaining self-service fee type (donation, tournament fee, and a
+// cancellation/no-show/other fee paid without referencing a specific
+// outstanding payments row via settles_payment_id) — just logs the payment
+// against whichever of member/coach submitted it, no further cascade.
+// payment_verification.payment_type and payments.payment_type share these
+// five values verbatim, so it's safe to copy straight across.
 const approveMemberPayment = async (connection, verification, reviewerId, remarks) => {
     if (!verification.member_id && !verification.coach_id) {
-        throw new Error('This verification has no linked member or coach.');
+        const err = new Error('This verification has no linked member or coach.');
+        err.statusCode = 400;
+        throw err;
     }
 
     await connection.query(
@@ -259,24 +273,28 @@ const approveGuestBooking = async (connection, verification, reviewerId, remarks
 
 // Rejecting frees the slot for the next guest's booking attempt (a fresh
 // row — bookings no longer reuses an old booking_id, see
-// schemaBootstrap.ensureBookingsSchema). Guarded the same way
-// approveGuestBooking is: a booking that's no longer 'pending' (e.g. already
-// approved+paid, then this verification got undone and is being rejected
-// instead) can't be silently rejected out from under a real, settled booking.
+// schemaBootstrap.ensureBookingsSchema). Guarded against the one real
+// conflict — a booking that's already 'confirmed' (approved+paid through
+// another path) can't be silently rejected out from under a real, settled
+// booking; that needs an explicit refund decision instead. A booking that's
+// already 'cancelled'/'rejected' (e.g. its 5-minute guest lock expired and
+// utils/guestLockSweep.js closed it out before this receipt was reviewed)
+// is already a dead end — there's nothing left to protect there, so the
+// verification just closes out too, instead of getting permanently stuck
+// with no way to leave the pending queue.
 const rejectGuestBooking = async (connection, verification, reviewerId, remarks) => {
     const [[booking]] = await connection.query('SELECT booking_id, status FROM bookings WHERE booking_id = ? FOR UPDATE', [verification.booking_id]);
-    if (!booking) {
-        const err = new Error('The booking this submission is for no longer exists.');
-        err.statusCode = 404;
-        throw err;
-    }
-    if (booking.status !== 'pending') {
-        const err = new Error(`This booking is already ${booking.status} and can't be rejected this way.`);
+    if (booking && booking.status === 'confirmed') {
+        const err = new Error('This booking is already confirmed and paid — cancel the booking directly (and handle any refund) instead of declining this receipt.');
         err.statusCode = 409;
         throw err;
     }
-
-    await connection.query("UPDATE bookings SET status = 'rejected' WHERE booking_id = ?", [verification.booking_id]);
+    if (booking && booking.status === 'pending') {
+        await connection.query("UPDATE bookings SET status = 'rejected' WHERE booking_id = ?", [verification.booking_id]);
+    }
+    // else: booking is already cancelled/rejected, or the row is gone
+    // entirely — nothing more to do to the booking side, just close the
+    // verification.
 
     await connection.query(
         "UPDATE payment_verification SET status = 'rejected', reviewed_by = ?, reviewed_at = NOW(), remarks = ? WHERE verification_id = ?",
@@ -327,13 +345,14 @@ const reviewVerification = (status) => async (req, res) => {
                 if (verification.payment_type === 'membership_renewal') {
                     return approveMembershipRenewal(connection, verification, req.user.user_id, remarks);
                 }
-                if (['donation', 'tournament_fee'].includes(verification.payment_type)) {
-                    return approveMemberPayment(connection, verification, req.user.user_id, remarks);
-                }
                 if (verification.payment_type === 'booking') {
                     return approveGuestBooking(connection, verification, req.user.user_id, remarks);
                 }
-                return reviewOther(connection, status, verification, req.user.user_id, remarks);
+                // donation, tournament_fee, cancellation_fee, no_show_fee, other —
+                // every payment_type not already special-cased above ends up
+                // here, so every approval records a real payments row; nothing
+                // silently approves with no money ever hitting the ledger.
+                return approveMemberPayment(connection, verification, req.user.user_id, remarks);
             }
 
             if (verification.payment_type === 'registration') {
@@ -357,31 +376,44 @@ const reviewVerification = (status) => async (req, res) => {
     }
 };
 
-// Lets an admin correct what was recorded after the fact — e.g. the slip was
-// misread, or the declared amount didn't match what was actually deposited.
-// Keeps payment_verification and (if one exists) the linked payments ledger
-// row in sync, regardless of the verification's current status.
+// Lets an admin correct what was recorded — remarks can be edited any time
+// (it's just an admin note). amount_declared can only be edited while still
+// pending: once approved, the declared amount has already been copied
+// verbatim into a payments row (and, for registration/membership_renewal,
+// into a memberships.purchase_price and used to derive its end_date) —
+// editing it afterward would desync amount_declared from those already-
+// created rows with no way to cascade the correction into them. Undo the
+// decision first (back to pending) if the amount genuinely needs fixing.
 const editVerification = async (req, res) => {
     const { id } = req.params;
     const { remarks, amount_declared } = req.body;
 
-    const fields = [];
-    const values = [];
-    if (remarks !== undefined) { fields.push('remarks = ?'); values.push(remarks); }
-    if (amount_declared !== undefined) { fields.push('amount_declared = ?'); values.push(amount_declared); }
-
     try {
         await withTransaction(async (connection) => {
-            const [result] = await connection.query(
-                `UPDATE payment_verification SET ${fields.join(', ')} WHERE verification_id = ?`,
-                [...values, id]
+            const [[verification]] = await connection.query(
+                'SELECT verification_id, status FROM payment_verification WHERE verification_id = ? FOR UPDATE',
+                [id]
             );
-
-            if (result.affectedRows === 0) {
+            if (!verification) {
                 const err = new Error('Verification record not found.');
                 err.statusCode = 404;
                 throw err;
             }
+            if (amount_declared !== undefined && verification.status !== 'pending') {
+                const err = new Error('The declared amount can only be edited while this submission is still pending — undo the decision first if it needs correcting.');
+                err.statusCode = 409;
+                throw err;
+            }
+
+            const fields = [];
+            const values = [];
+            if (remarks !== undefined) { fields.push('remarks = ?'); values.push(remarks); }
+            if (amount_declared !== undefined) { fields.push('amount_declared = ?'); values.push(amount_declared); }
+
+            await connection.query(
+                `UPDATE payment_verification SET ${fields.join(', ')} WHERE verification_id = ?`,
+                [...values, id]
+            );
 
             if (amount_declared !== undefined) {
                 await connection.query('UPDATE payments SET amount = ? WHERE verification_id = ?', [amount_declared, id]);
@@ -418,7 +450,9 @@ const undoRegistration = async (connection, verification) => {
     );
 
     if (!request) {
-        throw new Error('Linked registration request not found.');
+        const err = new Error('Linked registration request not found.');
+        err.statusCode = 404;
+        throw err;
     }
 
     if (verification.status === 'approved') {
@@ -481,12 +515,32 @@ const undoVerification = async (req, res) => {
                 throw err;
             }
 
-            if (verification.payment_type === 'registration') {
+            if (verification.status === 'approved' && verification.settles_payment_id) {
+                // approveFeeSettlement only flipped the existing fee's status
+                // to 'completed' — revert it to 'recorded' (outstanding)
+                // rather than leaving it marked paid while its own receipt
+                // goes back to pending review. Without this, re-approving
+                // later hits approveFeeSettlement's own guard ("this fee is
+                // already completed") and the verification gets stuck with
+                // no way forward.
+                await connection.query(
+                    "UPDATE payments SET status = 'recorded' WHERE verification_id = ? AND status = 'completed'",
+                    [verification.verification_id]
+                );
+            } else if (verification.payment_type === 'registration') {
                 await undoRegistration(connection, verification);
+            } else if (verification.status === 'approved') {
+                // Every other approvable type (membership_renewal and booking
+                // are blocked above; everything else funnels through
+                // approveMemberPayment) inserted exactly one new payments row
+                // for this receipt — delete it so undo is fully reversible
+                // and a later re-approval can't create a second, duplicate
+                // ledger entry for the same physical receipt.
+                await connection.query('DELETE FROM payments WHERE verification_id = ?', [verification.verification_id]);
             }
 
             await connection.query(
-                "UPDATE payment_verification SET status = 'pending', reviewed_by = NULL, remarks = NULL WHERE verification_id = ?",
+                "UPDATE payment_verification SET status = 'pending', reviewed_by = NULL, reviewed_at = NULL, remarks = NULL WHERE verification_id = ?",
                 [verification.verification_id]
             );
         });
