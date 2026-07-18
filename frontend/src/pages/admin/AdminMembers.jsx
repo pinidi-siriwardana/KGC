@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Mail, Phone, Settings, Trash2, Plus, ShieldCheck } from 'lucide-react';
+import { User, Mail, Phone, Settings, Plus, ShieldCheck } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import MembershipStatusBadge from '../../components/common/MembershipStatusBadge';
 import SearchInput from '../../components/common/SearchInput';
@@ -101,17 +101,6 @@ const AdminMembers = () => {
     fetchMembers();
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete member and login account?")) return;
-    const res = await apiFetch(`/api/members/delete/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      fetchMembers();
-    } else {
-      const err = await res.json();
-      alert(err.message || 'Failed to delete member.');
-    }
-  };
-
   return (
     <div className="p-6">
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
@@ -164,7 +153,6 @@ const AdminMembers = () => {
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                       <button onClick={() => handleOpenModal(m)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Settings size={16} /></button>
-                      <button onClick={() => handleDelete(m.member_id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                     </div>
                   </td>
                 </tr>

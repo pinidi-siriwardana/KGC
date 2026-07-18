@@ -77,7 +77,7 @@ const lookupGuest = async (req, res) => {
 
     try {
         const [[guest]] = await pool.query(
-            'SELECT guest_id, full_name, phone, email FROM guests WHERE is_deleted = 0 AND (phone = ? OR email = ?) LIMIT 1',
+            "SELECT guest_id, full_name, phone, email FROM guests WHERE status = 'active' AND (phone = ? OR email = ?) LIMIT 1",
             [normalized, normalized]
         );
         res.json({ data: guest || null });
@@ -114,7 +114,7 @@ const createGuestLock = async (req, res) => {
 
             let guest_id;
             if (existingGuestId) {
-                const [[guest]] = await connection.query('SELECT guest_id FROM guests WHERE guest_id = ? AND is_deleted = 0', [existingGuestId]);
+                const [[guest]] = await connection.query("SELECT guest_id FROM guests WHERE guest_id = ? AND status = 'active'", [existingGuestId]);
                 if (!guest) badRequest('Invalid guest_id.');
                 guest_id = guest.guest_id;
             } else {
@@ -127,7 +127,7 @@ const createGuestLock = async (req, res) => {
                 // through and create two guest rows for one real person.
                 const normalizedPhone = normalizeIfPhone(guest_phone);
                 const [[existingGuest]] = await connection.query(
-                    'SELECT guest_id FROM guests WHERE is_deleted = 0 AND phone = ? FOR UPDATE',
+                    "SELECT guest_id FROM guests WHERE status = 'active' AND phone = ? FOR UPDATE",
                     [normalizedPhone]
                 );
                 if (existingGuest) {
@@ -336,7 +336,7 @@ const createBooking = async (req, res) => {
                     coach_id = req.body.coach_id;
                 } else {
                     if (req.body.guest_id) {
-                        const [[g]] = await connection.query('SELECT guest_id FROM guests WHERE guest_id = ? AND is_deleted = 0', [req.body.guest_id]);
+                        const [[g]] = await connection.query("SELECT guest_id FROM guests WHERE guest_id = ? AND status = 'active'", [req.body.guest_id]);
                         if (!g) badRequest('Invalid guest_id.');
                         guest_id = req.body.guest_id;
                     } else {
@@ -350,7 +350,7 @@ const createBooking = async (req, res) => {
                         // record for someone who already has one.
                         const normalizedPhone = normalizeIfPhone(guest_phone);
                         const [[existingGuest]] = await connection.query(
-                            'SELECT guest_id FROM guests WHERE is_deleted = 0 AND phone = ? FOR UPDATE',
+                            "SELECT guest_id FROM guests WHERE status = 'active' AND phone = ? FOR UPDATE",
                             [normalizedPhone]
                         );
                         if (existingGuest) {

@@ -128,31 +128,4 @@ const updateCoachPhoto = async (req, res) => {
     }
 };
 
-const deleteCoach = async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const [[coach]] = await pool.query('SELECT user_id FROM coaches WHERE coach_id = ?', [id]);
-
-        if (!coach) {
-            return res.status(404).json({ message: 'Coach not found.' });
-        }
-
-        // Deleting the user cascades to the coaches row (fk_coach_user ON
-        // DELETE CASCADE) — but bookings.coach_id/created_by_user_id are
-        // ON DELETE RESTRICT, so this still fails for anyone who's ever
-        // booked a court, which is the normal case, not an edge one.
-        await pool.query('DELETE FROM users WHERE user_id = ?', [coach.user_id]);
-
-        res.json({ message: 'Coach and login account deleted.' });
-    } catch (err) {
-        if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED') {
-            return res.status(409).json({
-                message: 'Cannot delete: this coach has booking or payment history. Disable their account instead (Access Management) if they should lose access.'
-            });
-        }
-        res.status(500).json({ message: 'Failed to delete coach.', error: err.message });
-    }
-};
-
-module.exports = { getCoaches, getPublicCoaches, createCoach, updateCoach, updateCoachPhoto, deleteCoach };
+module.exports = { getCoaches, getPublicCoaches, createCoach, updateCoach, updateCoachPhoto };

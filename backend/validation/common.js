@@ -35,6 +35,18 @@ const normalizeIfPhone = (raw) => {
     return raw.trim();
 };
 
+// A create/update schema whose "full object replace" forms spread a
+// previously-fetched row (which can have a genuinely NULL email/phone/
+// position on a record that was created without one) straight back into the
+// submit body — so an untouched NULL field arrives as literal `null`, not
+// `undefined` or `''`. Zod's `.optional()` only tolerates `undefined`, so
+// editing anything else on that record (e.g. just its status) would
+// otherwise fail with a type-mismatch error unrelated to what was actually
+// changed. These normalize `null` to whatever an actually-empty form field
+// would send, before the field's real validator runs.
+const nullToEmpty = (val) => (val === null ? '' : val);
+const nullToUndefined = (val) => (val === null ? undefined : val);
+
 const positiveAmount = z.coerce.number().positive('amount must be a positive number');
 
 const nonNegativeAmount = z.coerce.number().nonnegative('amount must be a non-negative number');
@@ -60,4 +72,5 @@ const optionalMemberId = z.preprocess(
 module.exports = {
     idParam, dateString, email, phone, password, username, positiveAmount, nonNegativeAmount,
     PHONE_FORMAT_HINT, optionalMembershipTypeId, optionalMemberId, normalizeIfPhone,
+    nullToEmpty, nullToUndefined,
 };

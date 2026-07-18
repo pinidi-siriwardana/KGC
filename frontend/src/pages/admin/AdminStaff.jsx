@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { UserPlus, Edit3, Trash2, Search, Phone, Mail, RotateCcw, ShieldCheck, Lock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { UserPlus, Edit3, Search, Phone, Mail, ShieldCheck, Lock } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import FilterSelect from '../../components/common/FilterSelect';
 import { apiFetch } from '../../utils/api';
-
-const UNDO_TIMEOUT_MS = 8000;
 
 const TYPE_OPTIONS = [
     { value: '', label: 'All Types' },
@@ -31,10 +29,6 @@ const AdminStaff = () => {
     const [editingStaff, setEditingStaff] = useState(null);
     const [formData, setFormData] = useState(emptyFormData);
 
-    const [undoInfo, setUndoInfo] = useState(null);
-    const undoTimerRef = useRef(null);
-
-    useEffect(() => () => clearTimeout(undoTimerRef.current), []);
     useEffect(() => { fetchStaff(); }, []);
 
     const fetchStaff = async () => {
@@ -81,51 +75,8 @@ const AdminStaff = () => {
         }
     };
 
-    const handleDelete = async (member) => {
-        if (!window.confirm(`Remove ${member.full_name} from the staff directory?`)) return;
-
-        const res = await apiFetch(`/api/staff/${member.staff_id}`, { method: 'DELETE' });
-
-        if (res.ok) {
-            fetchStaff();
-            clearTimeout(undoTimerRef.current);
-            setUndoInfo({ staff_id: member.staff_id, full_name: member.full_name });
-            undoTimerRef.current = setTimeout(() => setUndoInfo(null), UNDO_TIMEOUT_MS);
-        } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to remove staff member.');
-        }
-    };
-
-    const handleUndoDelete = async () => {
-        if (!undoInfo) return;
-        clearTimeout(undoTimerRef.current);
-
-        const res = await apiFetch(`/api/staff/${undoInfo.staff_id}/restore`, { method: 'PATCH' });
-        if (res.ok) {
-            setUndoInfo(null);
-            fetchStaff();
-        } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to restore staff member.');
-        }
-    };
-
     return (
         <div className="p-6">
-            {undoInfo && (
-                <div className="mb-6 flex items-center gap-4 bg-slate-900 text-white rounded-2xl px-5 py-3.5 shadow-lg">
-                    <p className="text-xs font-semibold flex-1">
-                        <span className="font-black">{undoInfo.full_name}</span> removed from the staff directory.
-                    </p>
-                    <button
-                        onClick={handleUndoDelete}
-                        className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-all"
-                    >
-                        <RotateCcw size={12} /> Undo
-                    </button>
-                </div>
-            )}
 
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-50/50">
@@ -195,7 +146,6 @@ const AdminStaff = () => {
                                         ) : (
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                                 <button onClick={() => handleOpenModal(s)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={16} /></button>
-                                                <button onClick={() => handleDelete(s)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                             </div>
                                         )}
                                     </td>

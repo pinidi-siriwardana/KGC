@@ -6,10 +6,10 @@ const getGuests = async (req, res) => {
     try {
         const [rows] = search
             ? await pool.query(
-                  `SELECT * FROM guests WHERE is_deleted = 0 AND (full_name LIKE ? OR phone LIKE ?) ORDER BY created_at DESC`,
+                  `SELECT * FROM guests WHERE (full_name LIKE ? OR phone LIKE ?) ORDER BY created_at DESC`,
                   [`%${search}%`, `%${search}%`]
               )
-            : await pool.query('SELECT * FROM guests WHERE is_deleted = 0 ORDER BY created_at DESC');
+            : await pool.query('SELECT * FROM guests ORDER BY created_at DESC');
 
         res.json(rows);
     } catch (err) {
@@ -18,12 +18,12 @@ const getGuests = async (req, res) => {
 };
 
 const createGuest = async (req, res) => {
-    const { full_name, phone, email } = req.body;
+    const { full_name, phone, email, status } = req.body;
 
     try {
         const [result] = await pool.query(
-            'INSERT INTO guests (full_name, phone, email) VALUES (?, ?, ?)',
-            [full_name, phone, email || null]
+            'INSERT INTO guests (full_name, phone, email, status) VALUES (?, ?, ?, ?)',
+            [full_name, phone, email || null, status || 'active']
         );
         res.status(201).json({ message: 'Guest created.', guest_id: result.insertId });
     } catch (err) {
@@ -31,17 +31,17 @@ const createGuest = async (req, res) => {
     }
 };
 
+// No delete for guests (or any admin directory) — status is the only way to
+// deactivate one, so real booking/payment history can never be removed from
+// the database through the dashboard.
 const updateGuest = async (req, res) => {
     const { id } = req.params;
-    const { full_name, phone, email } = req.body;
+    const { full_name, phone, email, status } = req.body;
 
     try {
-        // Same is_deleted guard deleteGuest/restoreGuest already use — a
-        // soft-deleted guest is meant to be untouchable until restored, not
-        // silently editable via a direct request against its still-valid id.
         const [result] = await pool.query(
-            'UPDATE guests SET full_name = ?, phone = ?, email = ? WHERE guest_id = ? AND is_deleted = 0',
-            [full_name, phone, email || null, id]
+            'UPDATE guests SET full_name = ?, phone = ?, email = ?, status = ? WHERE guest_id = ?',
+            [full_name, phone, email || null, status || 'active', id]
         );
 
         if (result.affectedRows === 0) {
@@ -54,40 +54,4 @@ const updateGuest = async (req, res) => {
     }
 };
 
-// Soft-delete: a hard DELETE would throw a raw FK error for any guest who
-// has ever made a court booking (bookings.guest_id has no ON DELETE
-// action). Hiding the row instead keeps booking history intact and lets
-// the admin undo the removal.
-const deleteGuest = async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const [result] = await pool.query('UPDATE guests SET is_deleted = 1 WHERE guest_id = ? AND is_deleted = 0', [id]);
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Guest not found.' });
-        }
-
-        res.json({ message: 'Guest removed.' });
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to delete guest.', error: err.message });
-    }
-};
-
-const restoreGuest = async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const [result] = await pool.query('UPDATE guests SET is_deleted = 0 WHERE guest_id = ? AND is_deleted = 1', [id]);
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Guest not found.' });
-        }
-
-        res.json({ message: 'Guest restored.' });
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to restore guest.', error: err.message });
-    }
-};
-
-module.exports = { getGuests, createGuest, updateGuest, deleteGuest, restoreGuest };
+module.exports = { getGuests, createGuest, updateGuest };

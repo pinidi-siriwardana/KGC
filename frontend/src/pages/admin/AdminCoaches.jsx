@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserCheck, Mail, Award, Phone, Settings, Trash2, Plus, X, Camera, Loader2 } from 'lucide-react';
+import { UserCheck, Mail, Award, Phone, Settings, Plus, X, Camera, Loader2 } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
@@ -82,17 +82,6 @@ const AdminCoaches = () => {
             fetchCoaches();
         } else {
             setPhotoError(await parseErrorMessage(res, 'Failed to upload photo.'));
-        }
-    };
-
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure? This will also delete the coach's login account.")) return;
-        const res = await apiFetch(`/api/coaches/delete/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-            fetchCoaches();
-        } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to delete coach.');
         }
     };
 
@@ -181,7 +170,6 @@ const AdminCoaches = () => {
                                     <td className="p-4 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                             <button onClick={() => handleOpenModal(coach)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Settings size={16} /></button>
-                                            <button onClick={() => handleDelete(coach.coach_id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                         </div>
                                     </td>
                                 </tr>

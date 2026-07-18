@@ -257,28 +257,4 @@ const updateUser = async (req, res) => {
     }
 };
 
-const deleteUser = async (req, res) => {
-    const { id } = req.params;
-
-    if (id === req.user.user_id) {
-        return res.status(400).json({ message: 'You cannot delete your own account.' });
-    }
-
-    try {
-        if (await isLastActiveAdmin(id)) {
-            return res.status(400).json({ message: 'Cannot delete the last active administrator.' });
-        }
-
-        const [result] = await pool.query('DELETE FROM users WHERE user_id = ?', [id]);
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-
-        res.json({ message: 'User deleted.' });
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to delete user.', error: err.message });
-    }
-};
-
-module.exports = { getUsers, createUser, updateUser, deleteUser, completeProfile };
+module.exports = { getUsers, createUser, updateUser, completeProfile };

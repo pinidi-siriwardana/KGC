@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserCheck, Shield, UserCog, Trash2, Plus, AlertTriangle, Wrench } from 'lucide-react';
+import { UserCheck, Shield, UserCog, Plus, AlertTriangle, Wrench } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
@@ -129,28 +129,6 @@ const AdminUsers = () => {
         }
     };
 
-    const handleDelete = async (id) => {
-        if (id === currentUserId) {
-            alert('You cannot delete your own account.');
-            return;
-        }
-        if (!window.confirm('Are you sure you want to delete this user? This cannot be undone.')) return;
-
-        try {
-            const res = await apiFetch(`/api/users/delete/${id}`, { method: 'DELETE' });
-
-            if (res.ok) {
-                fetchUsers();
-            } else {
-                const err = await res.json();
-                alert(err.message || 'Failed to delete user.');
-            }
-        } catch (err) {
-            console.error('Delete error:', err);
-            alert('Check your internet or server connection.');
-        }
-    };
-
     const handleOpenCompleteProfile = (user) => {
         setCompletingUser(user);
         setProfileForm(emptyProfileForm());
@@ -255,14 +233,6 @@ const AdminUsers = () => {
                                                 </button>
                                             )}
                                             <button onClick={() => handleOpenModal(u)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><UserCheck size={16} /></button>
-                                            {u.user_id !== currentUserId && (
-                                                <button
-                                                    onClick={() => handleDelete(u.user_id)}
-                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            )}
                                         </div>
                                     </td>
                                 </tr>

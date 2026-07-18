@@ -9,14 +9,36 @@ const ignoreIfAlreadyApplied = (err) => {
     throw err;
 };
 
-// guests.is_deleted: lets guest profiles be soft-deleted (with undo) instead
-// of hard DELETE, which used to fail with a raw FK error for any guest who
-// had ever made a court booking.
+// guests.status: replaces is_deleted (see retireGuestSoftDelete below) — the
+// admin dashboard no longer deletes any directory record (member/coach/
+// staff/guest); every one of them is deactivated via a status column
+// instead, so nobody can remove real data (booking/payment history) from
+// the database through the UI. 'inactive' plays the same "hide/deprioritize
+// without losing history" role is_deleted used to.
 const ensureGuestsSchema = async () => {
     try {
-        await pool.query('ALTER TABLE guests ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0');
+        await pool.query("ALTER TABLE guests ADD COLUMN status ENUM('active', 'inactive') NOT NULL DEFAULT 'active'");
     } catch (err) {
         ignoreIfAlreadyApplied(err);
+    }
+};
+
+// One-time migration for installs where `guests` still has is_deleted:
+// carry forward whatever was already soft-deleted as status='inactive' (so
+// nothing that was previously hidden suddenly reappears as active), then
+// drop the column. Both steps are no-ops on any install past its first run.
+const retireGuestSoftDelete = async () => {
+    try {
+        await pool.query("UPDATE guests SET status = 'inactive' WHERE is_deleted = 1");
+    } catch (err) {
+        if (err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+        return; // column already dropped (or never existed) — nothing to migrate
+    }
+
+    try {
+        await pool.query('ALTER TABLE guests DROP COLUMN is_deleted');
+    } catch (err) {
+        if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY' && err.code !== 'ER_BAD_FIELD_ERROR') throw err;
     }
 };
 
@@ -39,6 +61,9 @@ const ensurePaymentsSchema = async () => {
 // admins (linked to their login via user_id), plus guards/other staff who
 // have no system login at all (user_id stays NULL for those). Brand new
 // table, so a plain CREATE TABLE IF NOT EXISTS is enough — no ALTER needed.
+// staff.is_deleted was retired (see retireStaffSoftDelete below) — the admin
+// dashboard has no delete for staff at all now (status is the only way to
+// deactivate one), so there was nothing left for is_deleted to do.
 const ensureStaffSchema = async () => {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS staff (
@@ -50,12 +75,32 @@ const ensureStaffSchema = async () => {
             staff_type ENUM('admin', 'guard', 'other') NOT NULL DEFAULT 'other',
             position VARCHAR(100) NULL,
             status ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
-            is_deleted TINYINT(1) NOT NULL DEFAULT 0,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY unique_staff_user (user_id),
             CONSTRAINT fk_staff_user FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
         )
     `);
+};
+
+// One-time migration for installs where `staff` was created back when it
+// still had is_deleted: purge whatever a previous soft-delete already
+// marked gone (those rows were already presented to admins as "removed" —
+// leaving them in place would resurrect them the moment the column-based
+// filter disappears from staffController), then drop the column. Both
+// steps are no-ops on any install past its first run after this change.
+const retireStaffSoftDelete = async () => {
+    try {
+        await pool.query('DELETE FROM staff WHERE is_deleted = 1');
+    } catch (err) {
+        if (err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+        return; // column already dropped (or never existed) — nothing to purge
+    }
+
+    try {
+        await pool.query('ALTER TABLE staff DROP COLUMN is_deleted');
+    } catch (err) {
+        if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY' && err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+    }
 };
 
 // Admins created before the Staff Directory existed have no `staff` row —
@@ -204,8 +249,10 @@ const backfillRegistrationCreatedUser = async () => {
 
 const ensureSchema = async () => {
     await ensureGuestsSchema();
+    await retireGuestSoftDelete();
     await ensurePaymentsSchema();
     await ensureStaffSchema();
+    await retireStaffSoftDelete();
     await backfillAdminStaffRecords();
     await ensureCoachesSchema();
     await ensureCourtsSchema();
