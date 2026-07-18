@@ -15,8 +15,8 @@ This repo's docs are split by concern rather than crammed into one file:
 | [`PROJECT_OVERVIEW.md`](./PROJECT_OVERVIEW.md) | Start here if you're new — purpose, architecture, entry points, key components, data flow, and the gotchas worth knowing before changing something. |
 | [`DB.md`](./DB.md) | Full database schema — every table, column, key, and foreign key, generated from the live database. |
 | [`API.md`](./API.md) | Every backend endpoint — method, path, required role, one-line description. |
-| [`BUG_REPORT.md`](./BUG_REPORT.md) | A log of bugs found and fixed during QA passes, plus known open issues. |
-| [`TESTCASES.md`](./TESTCASES.md) | The manual test plan (no automated suite exists yet) — functional cases per feature area, plus a regression suite tied to specific fixed bugs. |
+| [`API_DESIGN.md`](./API_DESIGN.md) | A handful of representative endpoints spelled out in full — request/response body shapes and status codes — as a template for the rest. |
+| [`design.md`](./design.md) | The "Heritage Elite" design system — color tokens, type scale, spacing, and component patterns used across the frontend. |
 
 ## Getting started
 
