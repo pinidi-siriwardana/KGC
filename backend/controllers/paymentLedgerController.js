@@ -76,4 +76,31 @@ const updatePayment = async (req, res) => {
     }
 };
 
-module.exports = { getPayments, updatePayment };
+// Outstanding arrears for every member/coach at once — 'recorded' means
+// charged but not yet paid (see DB.md's payments.status note). Grouped by
+// person so the Attendance screen can look someone up by id without an
+// extra round trip per check-in.
+const getOutstandingDues = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT payment_id, member_id, coach_id, amount, payment_type, payment_date, notes
+             FROM payments
+             WHERE status = 'recorded' AND (member_id IS NOT NULL OR coach_id IS NOT NULL)
+             ORDER BY payment_date ASC`
+        );
+
+        const members = {};
+        const coaches = {};
+        for (const row of rows) {
+            const bucket = row.member_id !== null ? members : coaches;
+            const key = row.member_id !== null ? row.member_id : row.coach_id;
+            (bucket[key] ||= []).push(row);
+        }
+
+        res.json({ members, coaches });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to fetch outstanding dues.', error: err.message });
+    }
+};
+
+module.exports = { getPayments, updatePayment, getOutstandingDues };

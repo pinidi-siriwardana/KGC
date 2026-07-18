@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CalendarDays, UserPlus, LogOut, Ban, CheckCircle2, Clock, Pencil, History, ShieldOff, ChevronLeft, ChevronRight, Check, RotateCcw } from 'lucide-react';
+import { CalendarDays, UserPlus, LogOut, Ban, CheckCircle2, Clock, Pencil, History, ShieldOff, ChevronLeft, ChevronRight, Check, RotateCcw, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
@@ -33,6 +33,9 @@ const AdminAttendance = () => {
     const [loading, setLoading] = useState(true);
     const [members, setMembers] = useState([]);
     const [coaches, setCoaches] = useState([]);
+    const [duesByMember, setDuesByMember] = useState({});
+    const [duesByCoach, setDuesByCoach] = useState({});
+    const [collectDuesFor, setCollectDuesFor] = useState(null);
     const [addAttendeeFor, setAddAttendeeFor] = useState(null);
     const [addAttendeeTime, setAddAttendeeTime] = useState('');
     const [addAttendeeSearch, setAddAttendeeSearch] = useState('');
@@ -52,10 +55,45 @@ const AdminAttendance = () => {
     const [historyLoading, setHistoryLoading] = useState(false);
     const [historyFilters, setHistoryFilters] = useState({ from: '', to: '', search: '', type: '' });
 
+    // Outstanding arrears for every member/coach, so a check-in can flag
+    // (and settle) unpaid fees without leaving the Attendance screen.
+    const fetchDues = () => {
+        apiFetch('/api/payments/outstanding')
+            .then((res) => res.json())
+            .then((data) => {
+                setDuesByMember(data.members || {});
+                setDuesByCoach(data.coaches || {});
+            });
+    };
+
     useEffect(() => {
         apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
         apiFetch('/api/coaches').then((res) => res.json()).then((data) => setCoaches(data.data || []));
+        fetchDues();
     }, []);
+
+    const duesFor = (kind, id) => {
+        const items = (kind === 'member' ? duesByMember : duesByCoach)[id] || [];
+        const total = items.reduce((sum, p) => sum + Number(p.amount), 0);
+        return { items, total };
+    };
+
+    // Reuses the same status-update endpoint the Payments page's own "Mark as
+    // Paid" action uses — collecting a due here is just settling that same
+    // 'recorded' payment row on the spot.
+    const handleCollectDue = async (payment_id) => {
+        const res = await apiFetch(`/api/payments/update/${payment_id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'completed' }),
+        });
+        if (res.ok) {
+            flash(setSuccess, 'Payment collected.');
+            fetchDues();
+        } else {
+            const err = await res.json();
+            flash(setError, err.message || 'Failed to record payment.');
+        }
+    };
 
     const fetchAttendance = () => {
         setLoading(true);
@@ -313,25 +351,37 @@ const AdminAttendance = () => {
                                     </td>
                                     <td className="p-4">
                                         <div className="flex flex-col gap-2">
-                                            {r.attendees.map((a) => (
-                                                <div key={a.attendance_id} className="flex items-center gap-2 text-[11px]">
-                                                    <span className="font-bold text-slate-700">{a.attendee_name}</span>
-                                                    <span className="flex items-center gap-1 text-slate-400">
-                                                        <Clock size={10} /> {timeOf(a.checkin_time)} – {a.checkout_time ? timeOf(a.checkout_time) : '...'}
-                                                    </span>
-                                                    <button onClick={() => handleOpenEdit(a)}
-                                                        title="Edit check-in/check-out time"
-                                                        className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 px-2 py-1 rounded-lg hover:bg-blue-50">
-                                                        <Pencil size={10} />
-                                                    </button>
-                                                    {!a.checkout_time && (
-                                                        <button onClick={() => handleCheckOut(a.attendance_id)}
-                                                            className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
-                                                            <LogOut size={10} /> Check Out
+                                            {r.attendees.map((a) => {
+                                                const kind = a.member_id ? 'member' : 'coach';
+                                                const id = a.member_id || a.coach_id;
+                                                const dues = duesFor(kind, id);
+                                                return (
+                                                    <div key={a.attendance_id} className="flex items-center gap-2 text-[11px] flex-wrap">
+                                                        <span className="font-bold text-slate-700">{a.attendee_name}</span>
+                                                        <span className="flex items-center gap-1 text-slate-400">
+                                                            <Clock size={10} /> {timeOf(a.checkin_time)} – {a.checkout_time ? timeOf(a.checkout_time) : '...'}
+                                                        </span>
+                                                        {dues.total > 0 && (
+                                                            <button type="button" onClick={() => setCollectDuesFor({ kind, id, name: a.attendee_name })}
+                                                                title="Outstanding balance — click to collect"
+                                                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full hover:bg-red-100">
+                                                                LKR {dues.total} Due
+                                                            </button>
+                                                        )}
+                                                        <button onClick={() => handleOpenEdit(a)}
+                                                            title="Edit check-in/check-out time"
+                                                            className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 px-2 py-1 rounded-lg hover:bg-blue-50">
+                                                            <Pencil size={10} />
                                                         </button>
-                                                    )}
-                                                </div>
-                                            ))}
+                                                        {!a.checkout_time && (
+                                                            <button onClick={() => handleCheckOut(a.attendance_id)}
+                                                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
+                                                                <LogOut size={10} /> Check Out
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                             {r.attendees.length === 0 && (
                                                 <p className="text-slate-300 text-[10px] font-bold uppercase">No check-ins yet</p>
                                             )}
@@ -485,6 +535,7 @@ const AdminAttendance = () => {
                     <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-64 overflow-y-auto">
                         {pagedAttendeePool.map((p) => {
                             const isSelected = addAttendeeSelected?.kind === p.kind && addAttendeeSelected?.id === p.id;
+                            const dues = duesFor(p.kind, p.id);
                             return (
                                 <button
                                     type="button"
@@ -498,8 +549,17 @@ const AdminAttendance = () => {
                                         {isSelected && <Check size={12} />}
                                         {p.name}
                                     </span>
-                                    <span className={`text-[9px] font-black uppercase tracking-widest ${isSelected ? 'text-white/60' : 'text-slate-400'}`}>
-                                        {p.kind}
+                                    <span className="flex items-center gap-2">
+                                        {dues.total > 0 && (
+                                            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full border ${
+                                                isSelected ? 'bg-white/20 text-white border-white/30' : 'text-red-600 bg-red-50 border-red-100'
+                                            }`}>
+                                                LKR {dues.total} Due
+                                            </span>
+                                        )}
+                                        <span className={`text-[9px] font-black uppercase tracking-widest ${isSelected ? 'text-white/60' : 'text-slate-400'}`}>
+                                            {p.kind}
+                                        </span>
                                     </span>
                                 </button>
                             );
@@ -536,12 +596,68 @@ const AdminAttendance = () => {
                         />
                     </div>
 
-                    {addAttendeeSelected && (
-                        <p className="text-[11px] text-slate-500">
-                            Checking in <span className="font-bold text-slate-700">{addAttendeeSelected.name}</span> ({addAttendeeSelected.kind})
-                        </p>
-                    )}
+                    {addAttendeeSelected && (() => {
+                        const dues = duesFor(addAttendeeSelected.kind, addAttendeeSelected.id);
+                        return (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-500">
+                                    Checking in <span className="font-bold text-slate-700">{addAttendeeSelected.name}</span> ({addAttendeeSelected.kind})
+                                </p>
+                                {dues.total > 0 && (
+                                    <button type="button"
+                                        onClick={() => setCollectDuesFor(addAttendeeSelected)}
+                                        className="w-full flex items-center justify-between gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 text-left hover:bg-amber-100 transition-colors">
+                                        <span className="flex items-center gap-1.5 text-[10px] font-black uppercase text-amber-700">
+                                            <AlertTriangle size={12} /> Owes LKR {dues.total} — tap to collect
+                                        </span>
+                                        <span className="text-[9px] font-black uppercase text-amber-500">
+                                            {dues.items.length} item{dues.items.length === 1 ? '' : 's'}
+                                        </span>
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })()}
                 </div>
+            </Modal>
+
+            <Modal
+                isOpen={!!collectDuesFor}
+                onClose={() => setCollectDuesFor(null)}
+                title={`Outstanding Balance — ${collectDuesFor?.name || ''}`}
+                submitText="Close"
+                onSubmit={(e) => { e.preventDefault(); setCollectDuesFor(null); }}
+            >
+                {(() => {
+                    const dues = collectDuesFor ? duesFor(collectDuesFor.kind, collectDuesFor.id) : { items: [], total: 0 };
+                    return (
+                        <div className="space-y-3">
+                            {dues.items.length === 0 ? (
+                                <p className="text-slate-400 text-xs text-center py-4">No outstanding balance.</p>
+                            ) : (
+                                <>
+                                    <p className="text-[11px] text-slate-500">
+                                        Total due: <span className="font-black text-red-600">LKR {dues.total}</span>
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        {dues.items.map((due) => (
+                                            <div key={due.payment_id} className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                                                <span className="text-slate-700">
+                                                    <span className="font-bold capitalize">{due.payment_type.replace(/_/g, ' ')}</span>
+                                                    <span className="text-slate-400"> · LKR {due.amount} · {dateOf(due.payment_date)}</span>
+                                                </span>
+                                                <button type="button" onClick={() => handleCollectDue(due.payment_id)}
+                                                    className="shrink-0 text-[9px] font-black uppercase tracking-widest text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 border border-emerald-100">
+                                                    Mark Paid
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    );
+                })()}
             </Modal>
 
             <Modal

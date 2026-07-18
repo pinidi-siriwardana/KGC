@@ -9,7 +9,7 @@ const {
     editVerification,
     undoVerification,
 } = require('../controllers/paymentVerificationController');
-const { getPayments, updatePayment } = require('../controllers/paymentLedgerController');
+const { getPayments, updatePayment, getOutstandingDues } = require('../controllers/paymentLedgerController');
 const { createManualPayment } = require('../controllers/manualPaymentController');
 const { validate } = require('../middleware/validate');
 const { idParam } = require('../validation/common');
@@ -21,6 +21,7 @@ const {
 router.use(verifyToken, requireRole('admin'));
 
 router.get('/', validate(getPaymentsQuerySchema, 'query'), getPayments);
+router.get('/outstanding', getOutstandingDues);
 router.post('/manual', validate(createManualPaymentSchema), createManualPayment);
 router.patch('/update/:id', validate(idParam(), 'params'), validate(updatePaymentSchema), updatePayment);
 router.get('/pending', getPendingVerifications);

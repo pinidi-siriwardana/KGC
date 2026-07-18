@@ -49,6 +49,15 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+// A request with no body at all (no Content-Length/Transfer-Encoding) never
+// reaches body-parser's JSON parsing branch, so req.body stays `undefined`
+// instead of `{}` — every all-optional-fields Zod body schema (e.g.
+// checkOutSchema) then fails validation with "expected object, received
+// undefined" even though there was genuinely nothing to send.
+app.use((req, res, next) => {
+    if (req.body === undefined) req.body = {};
+    next();
+});
 app.use(logger);
 
 // Uploaded payment slips, served back for the admin receipt review UI.
