@@ -193,7 +193,12 @@ const ReceiptReview = () => {
 
         const res = await apiFetch(`/api/payments/${status === 'approved' ? 'approve' : 'reject'}/${editingEntry.verification_id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ remarks: editForm.remarks || null }),
+            // reviewVerificationSchema's remarks field is z.string().optional()
+            // — it tolerates being entirely absent, but not an explicit null.
+            // JSON.stringify drops an undefined-valued key, so this sends no
+            // `remarks` key at all when the textarea is empty, instead of
+            // `{"remarks": null}`, which the schema rejected outright.
+            body: JSON.stringify({ remarks: editForm.remarks || undefined }),
         });
         setSavingModal(false);
 
