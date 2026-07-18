@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CalendarDays, Filter, Lock, Unlock, XCircle, Ban, CheckCircle2, Pencil, AlertTriangle, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { CalendarDays, Filter, Lock, Unlock, XCircle, Ban, CheckCircle2, Pencil, AlertTriangle, RotateCcw, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiFetch } from '../../utils/api';
 import { slotKey } from '../../utils/bookingKey';
 import { todayISO } from '../../utils/date';
@@ -38,6 +38,9 @@ const AdminBookings = () => {
     const [bookings, setBookings] = useState([]);
     const [filters, setFilters] = useState({ date: '', status: '', court_id: '' });
     const [loadingBookings, setLoadingBookings] = useState(true);
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 10;
 
     const [cancellationFee, setCancellationFee] = useState(null);
     const [guestBookingFee, setGuestBookingFee] = useState(null);
@@ -123,7 +126,29 @@ const AdminBookings = () => {
             .finally(() => setLoadingBookings(false));
     }, [filters]);
 
-    const handleFilterChange = (e) => setFilters({ ...filters, [e.target.name]: e.target.value });
+    const handleFilterChange = (e) => {
+        setFilters({ ...filters, [e.target.name]: e.target.value });
+        setPage(1);
+    };
+
+    const handleSearchChange = (e) => {
+        setSearch(e.target.value);
+        setPage(1);
+    };
+
+    // Filters above are server-side (need a re-fetch); search is a plain
+    // client-side text match over whatever page of results that returned —
+    // cheap since the filtered set is already in memory.
+    const searchedBookings = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return bookings;
+        return bookings.filter((b) => [b.payer_name, b.court_name, b.booking_type, b.status]
+            .some((field) => field?.toLowerCase().includes(q)));
+    }, [bookings, search]);
+
+    const totalPages = Math.max(1, Math.ceil(searchedBookings.length / PAGE_SIZE));
+    const currentPage = Math.min(page, totalPages);
+    const paginatedBookings = searchedBookings.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
     const handleSelectSlot = (court, slot) => {
         setCreateError('');
@@ -311,6 +336,16 @@ const AdminBookings = () => {
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3">
                         <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={handleSearchChange}
+                                placeholder="Search payer, court, type..."
+                                className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none w-full sm:w-52"
+                            />
+                        </div>
+                        <div className="relative">
                             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                             <select name="status" value={filters.status} onChange={handleFilterChange}
                                 className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-wide outline-none appearance-none cursor-pointer">
@@ -347,7 +382,7 @@ const AdminBookings = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {bookings.map((b) => (
+                            {paginatedBookings.map((b) => (
                                 <tr key={b.booking_id} className="hover:bg-slate-50 transition-colors">
                                     <td className="p-4">
                                         <p className="text-slate-900 text-sm font-bold">{b.payer_name || 'Unknown'}</p>
@@ -410,12 +445,41 @@ const AdminBookings = () => {
                         </tbody>
                     </table>
 
-                    {!loadingBookings && bookings.length === 0 && (
+                    {!loadingBookings && searchedBookings.length === 0 && (
                         <div className="p-16 text-center">
                             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">No bookings match these filters</p>
                         </div>
                     )}
                 </div>
+
+                {searchedBookings.length > 0 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, searchedBookings.length)} of {searchedBookings.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <ChevronLeft size={14} />
+                            </button>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <ChevronRight size={14} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <Modal
