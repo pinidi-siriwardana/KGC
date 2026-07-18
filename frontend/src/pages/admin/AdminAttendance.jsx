@@ -59,17 +59,34 @@ const AdminAttendance = () => {
     // (and settle) unpaid fees without leaving the Attendance screen.
     const fetchDues = () => {
         apiFetch('/api/payments/outstanding')
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) throw new Error('Failed to load outstanding dues.');
+                return res.json();
+            })
             .then((data) => {
                 setDuesByMember(data.members || {});
                 setDuesByCoach(data.coaches || {});
-            });
+            })
+            .catch((err) => flash(setError, err.message));
     };
 
     useEffect(() => {
-        apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
-        apiFetch('/api/coaches').then((res) => res.json()).then((data) => setCoaches(data.data || []));
+        apiFetch('/api/members')
+            .then((res) => {
+                if (!res.ok) throw new Error('Failed to load members.');
+                return res.json();
+            })
+            .then((data) => setMembers(data.data || []))
+            .catch((err) => flash(setError, err.message));
+        apiFetch('/api/coaches')
+            .then((res) => {
+                if (!res.ok) throw new Error('Failed to load coaches.');
+                return res.json();
+            })
+            .then((data) => setCoaches(data.data || []))
+            .catch((err) => flash(setError, err.message));
         fetchDues();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const duesFor = (kind, id) => {
@@ -98,17 +115,16 @@ const AdminAttendance = () => {
     const fetchAttendance = () => {
         setLoading(true);
         apiFetch(`/api/attendance?date=${selectedDate}`)
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) throw new Error('Failed to load attendance for this date.');
+                return res.json();
+            })
             .then((data) => setRows(data.data || []))
+            .catch((err) => flash(setError, err.message))
             .finally(() => setLoading(false));
     };
 
-    useEffect(() => {
-        apiFetch(`/api/attendance?date=${selectedDate}`)
-            .then((res) => res.json())
-            .then((data) => setRows(data.data || []))
-            .finally(() => setLoading(false));
-    }, [selectedDate]);
+    useEffect(() => { fetchAttendance(); }, [selectedDate]);
 
     const fetchHistory = () => {
         setHistoryLoading(true);
@@ -119,8 +135,12 @@ const AdminAttendance = () => {
         if (historyFilters.type) params.append('type', historyFilters.type);
 
         apiFetch(`/api/attendance/history?${params.toString()}`)
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) throw new Error('Failed to load attendance history.');
+                return res.json();
+            })
             .then((data) => setHistoryRows(data.data || []))
+            .catch((err) => flash(setError, err.message))
             .finally(() => setHistoryLoading(false));
     };
 

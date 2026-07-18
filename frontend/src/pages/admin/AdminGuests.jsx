@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserPlus, Edit3, Trash2, Search, Phone, Mail, RotateCcw } from 'lucide-react';
 import Modal from '../../components/common/Modal';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseErrorMessage } from '../../utils/api';
 
 const UNDO_TIMEOUT_MS = 8000;
 
@@ -13,6 +13,7 @@ const GuestDashboard = () => {
     const [editingGuest, setEditingGuest] = useState(null);
     const [formData, setFormData] = useState({ full_name: '', phone: '', email: '' });
     const [undoInfo, setUndoInfo] = useState(null);
+    const [loadError, setLoadError] = useState('');
     const undoTimerRef = useRef(null);
 
     useEffect(() => () => clearTimeout(undoTimerRef.current), []);
@@ -32,18 +33,21 @@ const fetchGuests = async (searchQuery = "") => {
         const res = await apiFetch(url);
         const data = await res.json();
 
-        // FIX: Only set state if the data is actually an array
-        if (Array.isArray(data)) {
+        // Only set state if the data is actually an array — a non-ok
+        // response sends {message, error} instead, which must not be
+        // treated as "genuinely zero guests" (that's what an admin would
+        // see otherwise: an empty directory with no indication anything
+        // went wrong).
+        if (res.ok && Array.isArray(data)) {
             setGuests(data);
+            setLoadError('');
         } else {
-            // If the backend sent an error object, set guests to an empty array 
-            // so the .map() doesn't crash, and log the error.
-            console.error("Backend did not return an array:", data);
-            setGuests([]); 
+            setGuests([]);
+            setLoadError(data?.message || 'Failed to load guests.');
         }
-    } catch (err) {
-        console.error("Fetch failed", err);
-        setGuests([]); // Safety net
+    } catch {
+        setGuests([]);
+        setLoadError('Failed to load guests. Check your internet or server connection.');
     }
 };
 
@@ -84,8 +88,7 @@ const fetchGuests = async (searchQuery = "") => {
             setIsModalOpen(false);
             fetchGuests(searchTerm); // Refresh with current search context
         } else {
-            const err = await res.json();
-            alert(err.message || "Action failed");
+            alert(await parseErrorMessage(res, "Action failed"));
         }
     };
 
@@ -104,11 +107,10 @@ const fetchGuests = async (searchQuery = "") => {
                 setUndoInfo({ guest_id: guest.guest_id, full_name: guest.full_name });
                 undoTimerRef.current = setTimeout(() => setUndoInfo(null), UNDO_TIMEOUT_MS);
             } else {
-                const err = await res.json();
-                alert(err.message || "Delete failed");
+                alert(await parseErrorMessage(res, "Delete failed"));
             }
-        } catch (err) {
-            console.error("Delete request failed", err);
+        } catch {
+            alert("Check your internet or server connection.");
         }
     };
 
@@ -121,13 +123,18 @@ const fetchGuests = async (searchQuery = "") => {
             setUndoInfo(null);
             fetchGuests(searchTerm);
         } else {
-            const err = await res.json();
-            alert(err.message || "Restore failed");
+            alert(await parseErrorMessage(res, "Restore failed"));
         }
     };
 
     return (
         <div className="p-8 bg-slate-50 min-h-screen">
+            {loadError && (
+                <div className="mb-6 flex items-center justify-between gap-4 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold px-4 py-3 rounded-2xl">
+                    <span>{loadError}</span>
+                    <button onClick={() => fetchGuests(searchTerm)} className="shrink-0 uppercase tracking-widest text-[10px] underline hover:no-underline">Retry</button>
+                </div>
+            )}
             {undoInfo && (
                 <div className="mb-6 flex items-center gap-4 bg-slate-900 text-white rounded-2xl px-5 py-3.5 shadow-lg">
                     <p className="text-xs font-semibold flex-1">

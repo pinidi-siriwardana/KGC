@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Check, X, Eye, AlertCircle, Pencil, RotateCcw, ExternalLink, ImageOff } from 'lucide-react';
-import { apiFetch, API_URL } from '../../utils/api';
+import { apiFetch, API_URL, parseErrorMessage } from '../../utils/api';
 import { openUploadedFile } from '../../utils/openUploadedFile';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
@@ -70,8 +70,7 @@ const ReceiptReview = () => {
             fetchSlips();
             fetchHistory();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Action failed.');
+            alert(await parseErrorMessage(res, 'Action failed.'));
         }
     };
 
@@ -91,8 +90,7 @@ const ReceiptReview = () => {
             setEditingEntry(null);
             fetchHistory();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to save changes.');
+            alert(await parseErrorMessage(res, 'Failed to save changes.'));
         }
     };
 
@@ -109,8 +107,7 @@ const ReceiptReview = () => {
             fetchSlips();
             fetchHistory();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to undo.');
+            alert(await parseErrorMessage(res, 'Failed to undo.'));
         }
     };
 

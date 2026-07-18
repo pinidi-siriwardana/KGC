@@ -16,6 +16,7 @@ const AdminCourts = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState(null);
   const [photoErrors, setPhotoErrors] = useState({});
+  const [statusErrors, setStatusErrors] = useState({});
   const [brokenPhotos, setBrokenPhotos] = useState({});
 
   const filteredCourts = useMemo(() => {
@@ -62,7 +63,8 @@ const AdminCourts = () => {
   // Handle status toggle (Available vs Maintenance)
   const handleStatusToggle = async (id, currentStatus) => {
     const newStatus = currentStatus === 'available' ? 'maintenance' : 'available';
-    
+    setStatusErrors((e) => ({ ...e, [id]: '' }));
+
     const res = await apiFetch(`/api/courts/status/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ status: newStatus })
@@ -70,9 +72,12 @@ const AdminCourts = () => {
 
     if (res.ok) {
       // Optimistic UI update
-      setCourts(courts.map(court => 
+      setCourts(courts.map(court =>
         court.court_id === id ? { ...court, status: newStatus } : court
       ));
+    } else {
+      const message = await parseErrorMessage(res, 'Failed to update court status.');
+      setStatusErrors((e) => ({ ...e, [id]: message }));
     }
   };
 
@@ -154,6 +159,9 @@ const AdminCourts = () => {
                       <Hammer size={14} />
                       <span className="text-[10px] font-black uppercase tracking-widest">Maintenance</span>
                     </div>
+                  )}
+                  {statusErrors[court.court_id] && (
+                    <p className="text-[9px] text-red-500 font-bold mt-1">{statusErrors[court.court_id]}</p>
                   )}
                 </td>
 

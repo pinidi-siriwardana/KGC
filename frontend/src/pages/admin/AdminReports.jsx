@@ -94,6 +94,7 @@ const AdminReports = () => {
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [exporting, setExporting] = useState(false);
+    const [loadError, setLoadError] = useState('');
     const chartsRef = useRef(null);
 
     const groupBy = useMemo(() => resolveGroupBy(filters.from, filters.to), [filters.from, filters.to]);
@@ -112,13 +113,23 @@ const AdminReports = () => {
         setLoading(true);
         const query = buildQuery();
         Promise.all([
-            apiFetch(`/api/revenue/summary?${query}`).then((r) => r.json()),
-            apiFetch(`/api/revenue/transactions?${query}`).then((r) => r.json()),
+            apiFetch(`/api/revenue/summary?${query}`).then((r) => {
+                if (!r.ok) throw new Error('Failed to load revenue summary.');
+                return r.json();
+            }),
+            apiFetch(`/api/revenue/transactions?${query}`).then((r) => {
+                if (!r.ok) throw new Error('Failed to load transactions.');
+                return r.json();
+            }),
         ])
             .then(([summaryData, txData]) => {
                 setSummary(summaryData.data || null);
                 setTransactions(txData.data || []);
+                setLoadError('');
             })
+            // A failed load must not render as "zero revenue this range" —
+            // that's indistinguishable from a genuinely quiet period.
+            .catch((err) => setLoadError(err.message || 'Failed to load report data.'))
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters]);
@@ -206,6 +217,12 @@ const AdminReports = () => {
 
     return (
         <div className="p-6 space-y-6">
+            {loadError && (
+                <div className="flex items-center justify-between gap-4 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold px-4 py-3 rounded-xl">
+                    <span>{loadError}</span>
+                    <button onClick={() => setFilters({ ...filters })} className="shrink-0 uppercase tracking-widest text-[10px] underline hover:no-underline">Retry</button>
+                </div>
+            )}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <h1 className="text-slate-900 text-xl font-serif">Revenue Reports</h1>

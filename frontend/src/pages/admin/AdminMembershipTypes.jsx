@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Trophy, Pencil, Trash2, Plus } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseErrorMessage } from '../../utils/api';
 
 const AdminMembershipTypes = () => {
     const [types, setTypes] = useState([]);
@@ -10,6 +10,7 @@ const AdminMembershipTypes = () => {
     const [editingType, setEditingType] = useState(null);
     const [formData, setFormData] = useState({ name: '', duration_months: '', price: '' });
     const [search, setSearch] = useState('');
+    const [loadError, setLoadError] = useState('');
 
     const filteredTypes = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -19,9 +20,15 @@ const AdminMembershipTypes = () => {
     useEffect(() => { fetchTypes(); }, []);
 
     const fetchTypes = async () => {
-        const res = await apiFetch('/api/membership-types');
-        const data = await res.json();
-        setTypes(data.data || []);
+        try {
+            const res = await apiFetch('/api/membership-types');
+            if (!res.ok) throw new Error(await parseErrorMessage(res, 'Failed to load membership plans.'));
+            const data = await res.json();
+            setTypes(data.data || []);
+            setLoadError('');
+        } catch (err) {
+            setLoadError(err.message || 'Failed to load membership plans.');
+        }
     };
 
     const handleOpenModal = (type = null) => {
@@ -48,8 +55,7 @@ const AdminMembershipTypes = () => {
             setIsModalOpen(false);
             fetchTypes();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to save plan.');
+            alert(await parseErrorMessage(res, 'Failed to save plan.'));
         }
     };
 
@@ -61,13 +67,18 @@ const AdminMembershipTypes = () => {
         if (res.ok) {
             fetchTypes();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to delete plan.');
+            alert(await parseErrorMessage(res, 'Failed to delete plan.'));
         }
     };
 
     return (
-        <div className="p-6">
+        <div className="p-6 space-y-6">
+            {loadError && (
+                <div className="flex items-center justify-between gap-4 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold px-4 py-3 rounded-xl">
+                    <span>{loadError}</span>
+                    <button onClick={fetchTypes} className="shrink-0 uppercase tracking-widest text-[10px] underline hover:no-underline">Retry</button>
+                </div>
+            )}
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-50/50">
                     <div>

@@ -1,13 +1,23 @@
 const { z } = require('zod');
 const { username, email, phone, password } = require('./common');
 
+// The frontend forms that submit here always send the whole profileForm
+// object, not just the changed field(s) — so an admin/member/coach whose
+// email or phone isn't set yet (e.g. an admin account created without a
+// completed staff profile) submits '' for it even when only editing
+// username. '' must be normalized to undefined (same fix as
+// optionalMembershipTypeId/optionalMemberId in common.js) so that "still
+// blank" doesn't get rejected as "invalid email/phone" on every save.
+const optionalEmail = z.preprocess((v) => (v === '' ? undefined : v), email.optional());
+const optionalPhone = z.preprocess((v) => (v === '' ? undefined : v), phone.optional());
+
 // Self-service "update my profile" — every field optional (a request only
 // sends what changed), but a new password can't be set without proving the
 // current one, and an empty request is rejected outright.
 const updateProfileSchema = z.object({
     username: username.optional(),
-    email: email.optional(),
-    phone: phone.optional(),
+    email: optionalEmail,
+    phone: optionalPhone,
     currentPassword: z.string().optional(),
     newPassword: password.optional(),
 })

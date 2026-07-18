@@ -13,23 +13,41 @@ const FIELD_KEYS = Object.keys(emptyForm);
 const AdminClubSettings = () => {
     const [form, setForm] = useState(emptyForm);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState(null);
 
-    useEffect(() => {
+    // A failed load must never leave the form's blank defaults saveable —
+    // that would overwrite real settings with '' the moment Save is clicked.
+    // loadError keeps the form disabled (via `loading`) and blocks
+    // submission entirely until a retry actually succeeds.
+    const fetchSettings = () => {
         apiFetch('/api/settings')
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) throw new Error('Failed to load current settings.');
+                return res.json();
+            })
             .then((data) => {
                 const values = data.data || {};
                 setForm((f) => ({ ...f, ...Object.fromEntries(FIELD_KEYS.map((k) => [k, values[k] ?? ''])) }));
             })
+            .catch(() => setLoadError(true))
             .finally(() => setLoading(false));
-    }, []);
+    };
+
+    useEffect(() => { fetchSettings(); }, []);
+
+    const handleRetry = () => {
+        setLoading(true);
+        setLoadError(false);
+        fetchSettings();
+    };
 
     const handleChange = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (loadError) return;
         setSaving(true);
         setMessage(null);
 
@@ -64,6 +82,14 @@ const AdminClubSettings = () => {
             </header>
 
             <div className="relative z-10 bg-white border border-slate-100 shadow-sm rounded-3xl p-8 max-w-3xl">
+                {loadError && (
+                    <div className="flex items-center justify-between gap-4 mb-6 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-bold px-4 py-3 rounded-xl">
+                        <span>Couldn&apos;t load the current settings — saving is disabled until this succeeds, so real values can&apos;t be overwritten with blanks.</span>
+                        <button type="button" onClick={handleRetry} className="shrink-0 uppercase tracking-widest text-[10px] underline hover:no-underline">
+                            Retry
+                        </button>
+                    </div>
+                )}
                 <form onSubmit={handleSubmit} className="space-y-5">
 
                     <div className="space-y-1">
@@ -71,7 +97,7 @@ const AdminClubSettings = () => {
                             <MapPin size={12} /> Club Address
                         </label>
                         <textarea
-                            rows={2} disabled={loading} required
+                            rows={2} disabled={loading || loadError} required
                             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50 resize-none"
                             value={form.club_address} onChange={handleChange('club_address')}
                         />
@@ -83,7 +109,7 @@ const AdminClubSettings = () => {
                                 <Mail size={12} /> Contact Email
                             </label>
                             <input
-                                type="email" disabled={loading} required
+                                type="email" disabled={loading || loadError} required
                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50"
                                 value={form.club_email} onChange={handleChange('club_email')}
                             />
@@ -93,7 +119,7 @@ const AdminClubSettings = () => {
                                 <Phone size={12} /> Contact Number
                             </label>
                             <input
-                                type="tel" disabled={loading} required
+                                type="tel" disabled={loading || loadError} required
                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50"
                                 value={form.club_phone} onChange={handleChange('club_phone')}
                             />
@@ -105,7 +131,7 @@ const AdminClubSettings = () => {
                             <Clock size={12} /> Opening Hours
                         </label>
                         <input
-                            type="text" placeholder="e.g. Mon – Sun: 08:00 – 20:00" disabled={loading} required
+                            type="text" placeholder="e.g. Mon – Sun: 08:00 – 20:00" disabled={loading || loadError} required
                             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50"
                             value={form.club_opening_hours} onChange={handleChange('club_opening_hours')}
                         />
@@ -119,7 +145,7 @@ const AdminClubSettings = () => {
                                     <FaFacebookF size={14} />
                                 </div>
                                 <input
-                                    type="url" placeholder="https://facebook.com/yourpage" disabled={loading}
+                                    type="url" placeholder="https://facebook.com/yourpage" disabled={loading || loadError}
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50"
                                     value={form.club_facebook_url} onChange={handleChange('club_facebook_url')}
                                 />
@@ -129,7 +155,7 @@ const AdminClubSettings = () => {
                                     <FaInstagram size={14} />
                                 </div>
                                 <input
-                                    type="url" placeholder="https://instagram.com/yourpage" disabled={loading}
+                                    type="url" placeholder="https://instagram.com/yourpage" disabled={loading || loadError}
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50"
                                     value={form.club_instagram_url} onChange={handleChange('club_instagram_url')}
                                 />
@@ -139,7 +165,7 @@ const AdminClubSettings = () => {
                                     <FaXTwitter size={14} />
                                 </div>
                                 <input
-                                    type="url" placeholder="https://x.com/yourpage" disabled={loading}
+                                    type="url" placeholder="https://x.com/yourpage" disabled={loading || loadError}
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50"
                                     value={form.club_twitter_url} onChange={handleChange('club_twitter_url')}
                                 />
@@ -155,7 +181,7 @@ const AdminClubSettings = () => {
                     )}
 
                     <button
-                        type="submit" disabled={saving || loading}
+                        type="submit" disabled={saving || loading || loadError}
                         className="flex items-center gap-2 bg-emerald-600 px-6 py-3 rounded-xl text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-900 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50"
                     >
                         {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}

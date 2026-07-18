@@ -1,7 +1,12 @@
 const pool = require('../config/db');
-const { fetchTodayForecast } = require('../utils/weather');
+const { fetchTodayForecast, SRI_LANKA_OFFSET_MS } = require('../utils/weather');
 
-const nowTimeString = () => new Date().toTimeString().slice(0, 8); // "HH:MM:SS"
+// Fixed +5:30 offset, not the server's local time — the slot times this is
+// compared against (and the forecast itself, see utils/weather.js) are all
+// Colombo wall-clock, so a server running in any other timezone (UTC is
+// typical for cloud deployments) would otherwise compare against the wrong
+// "now" and pick the wrong "best upcoming slot".
+const nowTimeString = () => new Date(Date.now() + SRI_LANKA_OFFSET_MS).toISOString().slice(11, 19); // "HH:MM:SS"
 
 // WMO weather codes (used by Open-Meteo) collapsed into short labels — the
 // full table has ~30 codes, but a player only needs the gist.

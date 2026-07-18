@@ -59,10 +59,15 @@ const CoachHome = () => {
           .sort((a, b) => (a.booking_date + a.start_time).localeCompare(b.booking_date + b.start_time));
         setUpcomingBookings(upcoming.slice(0, 4));
 
+        // Built from local getFullYear/getMonth, not .toISOString() (always
+        // UTC) — Sri Lanka is UTC+5:30, so mixing a local setMonth() with a
+        // UTC-serialized read-back could land a full month off during the
+        // first ~5.5 hours of the 1st of any month. Same reasoning as
+        // utils/date.js's toLocalISO.
+        const now = new Date();
         const thisMonthKey = todayISO().slice(0, 7);
-        const lastMonthDate = new Date();
-        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-        const lastMonthKey = lastMonthDate.toISOString().slice(0, 7);
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
         const confirmed = bookings.filter((b) => b.status === 'confirmed');
         setSessionStats({

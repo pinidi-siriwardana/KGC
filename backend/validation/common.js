@@ -48,7 +48,16 @@ const optionalMembershipTypeId = z.preprocess(
     z.coerce.number().int().positive('membership_type_id must be a valid plan').optional()
 );
 
+// Same shape as optionalMembershipTypeId above — a "no member selected" form
+// field posts '' (e.g. the Miscellaneous manual-payment purpose's unlinked
+// option), which must be normalized to undefined before coercion rather than
+// failing positive() on Number('') === 0.
+const optionalMemberId = z.preprocess(
+    (val) => (val === '' || val === null || val === undefined ? undefined : val),
+    z.coerce.number().int().positive('member_id must be a valid member').optional()
+);
+
 module.exports = {
     idParam, dateString, email, phone, password, username, positiveAmount, nonNegativeAmount,
-    PHONE_FORMAT_HINT, optionalMembershipTypeId, normalizeIfPhone,
+    PHONE_FORMAT_HINT, optionalMembershipTypeId, optionalMemberId, normalizeIfPhone,
 };

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { MessageSquare, Mail, Phone, Clock, Send, Trash2, ChevronRight, Inbox } from 'lucide-react';
 import SearchInput from '../../components/common/SearchInput';
 import FilterSelect from '../../components/common/FilterSelect';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseErrorMessage } from '../../utils/api';
 
 const STATUS_STYLES = {
     unread:  'bg-amber-50 text-amber-700 border-amber-200',
@@ -25,6 +25,7 @@ const AdminInquiries = () => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [loadError, setLoadError] = useState('');
 
     const filteredInquiries = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -41,10 +42,12 @@ const AdminInquiries = () => {
         setLoading(true);
         try {
             const res = await apiFetch('/api/inquiries');
+            if (!res.ok) throw new Error(await parseErrorMessage(res, 'Failed to load inquiries.'));
             const data = await res.json();
             setInquiries(data.data || []);
+            setLoadError('');
         } catch (err) {
-            console.error('Failed to fetch inquiries', err);
+            setLoadError(err.message || 'Failed to load inquiries.');
         } finally {
             setLoading(false);
         }
@@ -57,13 +60,18 @@ const AdminInquiries = () => {
         if (inquiry.status === 'unread') {
             try {
                 const res = await apiFetch(`/api/inquiries/${inquiry.inquiry_id}`);
+                if (!res.ok) throw new Error(await parseErrorMessage(res, 'Failed to load this inquiry.'));
                 const data = await res.json();
                 setSelected(data.data);
                 setInquiries(prev =>
                     prev.map(i => i.inquiry_id === inquiry.inquiry_id ? { ...i, status: 'read' } : i)
                 );
             } catch (err) {
-                console.error('Failed to load inquiry', err);
+                // Leave `selected` as the row's already-known summary rather
+                // than resetting it to nothing — a failed detail fetch
+                // shouldn't make the pane look empty when there's real data
+                // to show, just without the full message body.
+                alert(err.message || 'Failed to load this inquiry.');
             }
         }
     };
@@ -85,10 +93,9 @@ const AdminInquiries = () => {
                 );
                 setReplyText('');
             } else {
-                const err = await res.json();
-                alert(err.message || 'Failed to send reply.');
+                alert(await parseErrorMessage(res, 'Failed to send reply.'));
             }
-        } catch (err) {
+        } catch {
             alert('Network error. Could not send reply.');
         } finally {
             setSending(false);
@@ -103,10 +110,9 @@ const AdminInquiries = () => {
                 setInquiries(prev => prev.filter(i => i.inquiry_id !== id));
                 if (selected?.inquiry_id === id) setSelected(null);
             } else {
-                const err = await res.json();
-                alert(err.message || 'Failed to delete inquiry.');
+                alert(await parseErrorMessage(res, 'Failed to delete inquiry.'));
             }
-        } catch (err) {
+        } catch {
             alert('Network error. Could not delete inquiry.');
         }
     };
@@ -145,7 +151,14 @@ const AdminInquiries = () => {
                     {loading && (
                         <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">Loading...</div>
                     )}
-                    {!loading && inquiries.length === 0 && (
+                    {!loading && loadError && (
+                        <div className="p-12 text-center">
+                            <Inbox size={32} className="text-rose-200 mx-auto mb-3" />
+                            <p className="text-rose-500 text-xs font-bold uppercase tracking-widest">{loadError}</p>
+                            <button onClick={fetchInquiries} className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-500 underline hover:no-underline">Retry</button>
+                        </div>
+                    )}
+                    {!loading && !loadError && inquiries.length === 0 && (
                         <div className="p-12 text-center">
                             <Inbox size={32} className="text-slate-200 mx-auto mb-3" />
                             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">No inquiries yet</p>

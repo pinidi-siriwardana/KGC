@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Search, Filter, Trophy, CreditCard, UserCheck, Receipt, Plus, Pencil, ShieldCheck, Ban, CircleCheck, CircleSlash, Heart, Landmark, UserX } from 'lucide-react';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseErrorMessage } from '../../utils/api';
 import { todayISO } from '../../utils/date';
 import Modal from '../../components/common/Modal';
 
@@ -40,6 +40,7 @@ const AdminPayments = () => {
     const [editingSettings, setEditingSettings] = useState(false);
     const [settingsForm, setSettingsForm] = useState({});
     const [savingSettings, setSavingSettings] = useState(false);
+    const [loadError, setLoadError] = useState('');
 
     const buildPaymentsQuery = () => {
         const params = new URLSearchParams();
@@ -49,26 +50,54 @@ const AdminPayments = () => {
         return params.toString();
     };
 
+    // A failed fetch here must not render identically to "genuinely no
+    // payments/plans/members" — an admin trusting an empty table or an
+    // empty "Membership Plan" dropdown (which would otherwise silently make
+    // every New Member payment unsubmittable) needs to see it actually failed.
     const fetchPayments = async () => {
-        const res = await apiFetch(`/api/payments?${buildPaymentsQuery()}`);
-        const data = await res.json();
-        setPayments(data.data || []);
-        setLoading(false);
+        try {
+            const res = await apiFetch(`/api/payments?${buildPaymentsQuery()}`);
+            if (!res.ok) throw new Error(await parseErrorMessage(res, 'Failed to load payments.'));
+            const data = await res.json();
+            setPayments(data.data || []);
+            setLoadError('');
+        } catch (err) {
+            setLoadError(err.message || 'Failed to load payments.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
-        apiFetch(`/api/payments?${buildPaymentsQuery()}`)
-            .then((res) => res.json())
-            .then((data) => setPayments(data.data || []))
-            .finally(() => setLoading(false));
+        fetchPayments();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters]);
 
-    useEffect(() => {
-        apiFetch('/api/membership-types').then((res) => res.json()).then((data) => setMembershipTypes(data.data || []));
-        apiFetch('/api/members').then((res) => res.json()).then((data) => setMembers(data.data || []));
-        apiFetch('/api/settings').then((res) => res.json()).then((data) => setSettings(data.data || null));
-    }, []);
+    const fetchReferenceData = () => {
+        setLoadError('');
+        Promise.all([
+            apiFetch('/api/membership-types').then((res) => {
+                if (!res.ok) throw new Error('Failed to load membership plans.');
+                return res.json();
+            }),
+            apiFetch('/api/members').then((res) => {
+                if (!res.ok) throw new Error('Failed to load members.');
+                return res.json();
+            }),
+            apiFetch('/api/settings').then((res) => {
+                if (!res.ok) throw new Error('Failed to load club settings.');
+                return res.json();
+            }),
+        ])
+            .then(([typesData, membersData, settingsData]) => {
+                setMembershipTypes(typesData.data || []);
+                setMembers(membersData.data || []);
+                setSettings(settingsData.data || null);
+            })
+            .catch((err) => setLoadError(err.message || 'Failed to load reference data.'));
+    };
+
+    useEffect(() => { fetchReferenceData(); }, []);
 
     const handleEditSettings = () => {
         setSettingsForm({
@@ -85,17 +114,21 @@ const AdminPayments = () => {
 
     const handleSaveSettings = async () => {
         setSavingSettings(true);
-        const res = await apiFetch('/api/settings', {
-            method: 'PATCH',
-            body: JSON.stringify(settingsForm),
-        });
-        setSavingSettings(false);
-        if (res.ok) {
-            setSettings({ ...settings, ...settingsForm });
-            setEditingSettings(false);
-        } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to update payment details.');
+        try {
+            const res = await apiFetch('/api/settings', {
+                method: 'PATCH',
+                body: JSON.stringify(settingsForm),
+            });
+            if (res.ok) {
+                setSettings({ ...settings, ...settingsForm });
+                setEditingSettings(false);
+            } else {
+                alert(await parseErrorMessage(res, 'Failed to update payment details.'));
+            }
+        } catch {
+            alert('Check your internet or server connection.');
+        } finally {
+            setSavingSettings(false);
         }
     };
 
@@ -125,8 +158,7 @@ const AdminPayments = () => {
             setIsModalOpen(false);
             fetchPayments();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to record payment.');
+            alert(await parseErrorMessage(res, 'Failed to record payment.'));
         }
     };
 
@@ -155,8 +187,7 @@ const AdminPayments = () => {
             setEditingPayment(null);
             fetchPayments();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to update payment.');
+            alert(await parseErrorMessage(res, 'Failed to update payment.'));
         }
     };
 
@@ -171,13 +202,20 @@ const AdminPayments = () => {
         if (res.ok) {
             fetchPayments();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to update payment.');
+            alert(await parseErrorMessage(res, 'Failed to update payment.'));
         }
     };
 
     return (
         <div className="p-6 space-y-6">
+            {loadError && (
+                <div className="flex items-center justify-between gap-4 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold px-4 py-3 rounded-xl">
+                    <span>{loadError}</span>
+                    <button onClick={() => { fetchPayments(); fetchReferenceData(); }} className="shrink-0 uppercase tracking-widest text-[10px] underline hover:no-underline">
+                        Retry
+                    </button>
+                </div>
+            )}
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">

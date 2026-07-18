@@ -68,17 +68,35 @@ const DetailChip = ({ icon: Icon, label, value }) => (
 const AdminHome = () => {
     const [overview, setOverview] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     const storedUser = (() => {
         try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
     })();
 
-    useEffect(() => {
+    const fetchOverview = () => {
         apiFetch('/api/admin/dashboard')
-            .then((res) => res.json())
-            .then((data) => setOverview(data.data || null))
+            .then((res) => {
+                if (!res.ok) throw new Error('Failed to load dashboard data.');
+                return res.json();
+            })
+            .then((data) => {
+                setOverview(data.data || null);
+                setLoadError('');
+            })
+            // A failed load must not render as "every stat is 0, all caught
+            // up" — that's indistinguishable from a genuinely quiet dashboard.
+            .catch((err) => setLoadError(err.message || 'Failed to load dashboard data.'))
             .finally(() => setLoading(false));
-    }, []);
+    };
+
+    useEffect(() => { fetchOverview(); }, []);
+
+    const handleRetry = () => {
+        setLoading(true);
+        setLoadError('');
+        fetchOverview();
+    };
 
     const revenueTrend = overview?.revenue?.trendPercent ?? 0;
     const timeseriesData = (overview?.revenue?.timeseries || []).map((row) => ({
@@ -92,6 +110,13 @@ const AdminHome = () => {
             {/* --- ATMOSPHERIC GLOWS (Softened for Light Mode) --- */}
             <div className="absolute -top-24 -left-24 w-96 h-96 bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-amber-500/5 blur-[150px] rounded-full pointer-events-none" />
+
+            {loadError && (
+                <div className="relative z-10 flex items-center justify-between gap-4 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold px-4 py-3 rounded-2xl">
+                    <span>{loadError}</span>
+                    <button onClick={handleRetry} className="shrink-0 uppercase tracking-widest text-[10px] underline hover:no-underline">Retry</button>
+                </div>
+            )}
 
             {/* Header Section */}
             <header className="relative z-10 flex justify-between items-end">
@@ -271,8 +296,8 @@ const AdminHome = () => {
                             ) : (overview?.recentActivity || []).length === 0 ? (
                                 <p className="text-slate-400 text-xs uppercase tracking-widest font-bold">No recent activity</p>
                             ) : (
-                                overview.recentActivity.map((item, i) => (
-                                    <div key={i} className="flex gap-4 items-start">
+                                overview.recentActivity.map((item) => (
+                                    <div key={`${item.type}-${item.timestamp}-${item.title}`} className="flex gap-4 items-start">
                                         <div className={`w-2 h-2 rounded-full mt-1.5 shadow-[0_0_8px_rgba(0,0,0,0.15)] ${ACTIVITY_DOT[item.type] || 'bg-slate-400'}`} />
                                         <div className="min-w-0">
                                             <p className="text-slate-700 text-xs font-bold leading-tight">{item.title}</p>

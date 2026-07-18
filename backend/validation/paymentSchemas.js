@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { username, password, email, phone, dateString, positiveAmount } = require('./common');
+const { username, password, email, phone, dateString, positiveAmount, optionalMemberId } = require('./common');
 
 const paymentTypeEnum = z.enum([
     'membership', 'booking_fee', 'coach_registration', 'other',
@@ -45,7 +45,7 @@ const newCoachPaymentSchema = z.object({
 const miscPaymentSchema = z.object({
     purpose: z.literal('misc'),
     ...manualPaymentBase,
-    member_id: z.coerce.number().int().positive().optional(),
+    member_id: optionalMemberId,
 });
 
 // Assigns a plan to an existing member (e.g. one registered with no plan

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit3, Trash2, Megaphone, Trophy, Hammer, Bell, Clock, Radio } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import SearchInput from '../../components/common/SearchInput';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseErrorMessage } from '../../utils/api';
 
 const CATEGORIES = ['GENERAL', 'CHAMPIONSHIP', 'MAINTENANCE', 'CLUB EVENT'];
 
@@ -46,6 +46,7 @@ const AdminAnnouncements = () => {
     const [editing, setEditing] = useState(null);
     const [formData, setFormData] = useState(emptyForm);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => { fetchAnnouncements(); }, []);
 
@@ -53,10 +54,12 @@ const AdminAnnouncements = () => {
         setLoading(true);
         try {
             const res = await apiFetch('/api/announcements/admin/all');
+            if (!res.ok) throw new Error(await parseErrorMessage(res, 'Failed to load announcements.'));
             const data = await res.json();
             setAnnouncements(data.data || []);
+            setLoadError('');
         } catch (err) {
-            console.error('Failed to fetch announcements', err);
+            setLoadError(err.message || 'Failed to load announcements.');
         } finally {
             setLoading(false);
         }
@@ -94,8 +97,7 @@ const AdminAnnouncements = () => {
             setIsModalOpen(false);
             fetchAnnouncements();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Action failed.');
+            alert(await parseErrorMessage(res, 'Action failed.'));
         }
     };
 
@@ -105,8 +107,7 @@ const AdminAnnouncements = () => {
         if (res.ok) {
             fetchAnnouncements();
         } else {
-            const err = await res.json();
-            alert(err.message || 'Failed to remove announcement.');
+            alert(await parseErrorMessage(res, 'Failed to remove announcement.'));
         }
     };
 
@@ -135,6 +136,13 @@ const AdminAnnouncements = () => {
                     <Plus size={16} /> New Announcement
                 </button>
             </header>
+
+            {loadError && (
+                <div className="flex items-center justify-between gap-4 mb-6 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold px-4 py-3 rounded-2xl">
+                    <span>{loadError}</span>
+                    <button onClick={fetchAnnouncements} className="shrink-0 uppercase tracking-widest text-[10px] underline hover:no-underline">Retry</button>
+                </div>
+            )}
 
             {/* Filter tabs */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">

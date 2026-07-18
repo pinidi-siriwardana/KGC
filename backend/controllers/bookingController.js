@@ -141,12 +141,17 @@ const createGuestLock = async (req, res) => {
                 }
             }
 
-            // Locking read against every row for this slot (any status) —
-            // serializes concurrent attempts on the exact same court/date/
-            // slot through one row lock, same as before. A pending row only
-            // still blocks while its lock hasn't expired.
+            // Locking read, scoped to the one active (pending/confirmed) row
+            // this slot can have — unique_active_court_slot guarantees at
+            // most one, so this can never return more than one row. Without
+            // the status filter, a slot that had already accumulated a
+            // cancelled row from an earlier abandoned lock could make this
+            // pick that stale cancelled row over the actually-current
+            // pending one (MySQL doesn't guarantee row order here), so the
+            // real stale lock below would never get cleaned up.
             const [[existing]] = await connection.query(
-                'SELECT booking_id, status, lock_expires_at FROM bookings WHERE court_id = ? AND booking_date = ? AND slot_id = ? FOR UPDATE',
+                `SELECT booking_id, status, lock_expires_at FROM bookings
+                 WHERE court_id = ? AND booking_date = ? AND slot_id = ? AND status IN ('pending', 'confirmed') FOR UPDATE`,
                 [court_id, booking_date, slot_id]
             );
 
@@ -220,36 +225,49 @@ const submitGuestPayment = async (req, res) => {
     if (!lock_token) return fail(403, 'Missing or invalid booking reference.');
 
     try {
-        const [[booking]] = await pool.query('SELECT * FROM bookings WHERE booking_id = ?', [booking_id]);
-        if (!booking) return fail(404, 'Booking not found.');
-        if (!booking.lock_token || booking.lock_token !== lock_token) return fail(403, 'Missing or invalid booking reference.');
-        if (booking.status !== 'pending') return fail(409, `This booking is already ${booking.status}.`);
-        if (booking.lock_expires_at && new Date(booking.lock_expires_at) <= new Date()) {
-            return fail(409, 'This slot hold has expired. Please select a slot again.');
-        }
+        const verification_id = await withTransaction(async (connection) => {
+            // FOR UPDATE makes the "already submitted" check below race-safe
+            // against a rapid double-submit (same pattern every other
+            // submit-then-check payment flow in this codebase uses) — and
+            // wrapping both writes in one transaction means a mid-write
+            // failure can never leave lock_expires_at still counting down
+            // on a booking that already has a receipt on file, which would
+            // otherwise let the guest-lock sweep cancel it out from under
+            // an already-submitted payment.
+            const [[booking]] = await connection.query('SELECT * FROM bookings WHERE booking_id = ? FOR UPDATE', [booking_id]);
+            if (!booking) notFound('Booking not found.');
+            if (!booking.lock_token || booking.lock_token !== lock_token) forbidden('Missing or invalid booking reference.');
+            if (booking.status !== 'pending') conflict(`This booking is already ${booking.status}.`);
+            if (booking.lock_expires_at && new Date(booking.lock_expires_at) <= new Date()) {
+                conflict('This slot hold has expired. Please select a slot again.');
+            }
 
-        const [[alreadySubmitted]] = await pool.query(
-            "SELECT verification_id FROM payment_verification WHERE booking_id = ? AND status = 'pending'",
-            [booking_id]
-        );
-        if (alreadySubmitted) return fail(409, 'A payment for this booking is already awaiting review.');
+            const [[alreadySubmitted]] = await connection.query(
+                "SELECT verification_id FROM payment_verification WHERE booking_id = ? AND status = 'pending'",
+                [booking_id]
+            );
+            if (alreadySubmitted) conflict('A payment for this booking is already awaiting review.');
 
-        const [[setting]] = await pool.query("SELECT setting_value FROM club_settings WHERE setting_key = 'guest_booking_fee'");
-        const fee = setting ? Number(setting.setting_value) : 0;
+            const [[setting]] = await connection.query("SELECT setting_value FROM club_settings WHERE setting_key = 'guest_booking_fee'");
+            const fee = setting ? Number(setting.setting_value) : 0;
 
-        const receipt_file_url = `/uploads/slips/${receiptFile.filename}`;
+            const receipt_file_url = `/uploads/slips/${receiptFile.filename}`;
 
-        const [result] = await pool.query(
-            `INSERT INTO payment_verification (booking_id, payment_type, receipt_file_url, amount_declared, note, status)
-             VALUES (?, 'booking', ?, ?, ?, 'pending')`,
-            [booking_id, receipt_file_url, fee, note || null]
-        );
+            const [result] = await connection.query(
+                `INSERT INTO payment_verification (booking_id, payment_type, receipt_file_url, amount_declared, note, status)
+                 VALUES (?, 'booking', ?, ?, ?, 'pending')`,
+                [booking_id, receipt_file_url, fee, note || null]
+            );
 
-        await pool.query('UPDATE bookings SET lock_expires_at = NULL WHERE booking_id = ?', [booking_id]);
+            await connection.query('UPDATE bookings SET lock_expires_at = NULL WHERE booking_id = ?', [booking_id]);
 
-        res.status(201).json({ message: 'Payment submitted for review.', verification_id: result.insertId });
+            return result.insertId;
+        });
+
+        res.status(201).json({ message: 'Payment submitted for review.', verification_id });
     } catch (err) {
         if (receiptFile) fs.unlink(receiptFile.path, () => {});
+        if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
         res.status(500).json({ message: 'Failed to submit payment.', error: err.message });
     }
 };
@@ -318,7 +336,7 @@ const createBooking = async (req, res) => {
                     coach_id = req.body.coach_id;
                 } else {
                     if (req.body.guest_id) {
-                        const [[g]] = await connection.query('SELECT guest_id FROM guests WHERE guest_id = ?', [req.body.guest_id]);
+                        const [[g]] = await connection.query('SELECT guest_id FROM guests WHERE guest_id = ? AND is_deleted = 0', [req.body.guest_id]);
                         if (!g) badRequest('Invalid guest_id.');
                         guest_id = req.body.guest_id;
                     } else {
@@ -380,13 +398,18 @@ const createBooking = async (req, res) => {
             if (role !== 'admin' && slot.date_in_past) badRequest('Cannot book a date in the past.');
             if (slot.slot_in_past) badRequest('This time slot has already ended and can no longer be booked.');
 
-            // Locking read: even with no matching row yet, InnoDB takes a gap
-            // lock here, so a concurrent request for the same slot blocks
-            // until this transaction commits, then correctly sees the row
-            // this request just created — genuinely race-safe, not a
+            // Locking read, scoped to the one active (pending/confirmed) row
+            // this slot can have (see the identical fix/comment in
+            // createGuestLock above — an unfiltered lookup here can pick a
+            // stale cancelled row over the real pending one and wrongly skip
+            // cleaning it up). Even with no matching row yet, InnoDB takes a
+            // gap lock here, so a concurrent request for the same slot
+            // blocks until this transaction commits, then correctly sees the
+            // row this request just created — genuinely race-safe, not a
             // check-then-act TOCTOU gap.
             const [[existing]] = await connection.query(
-                'SELECT booking_id, status, lock_expires_at FROM bookings WHERE court_id = ? AND booking_date = ? AND slot_id = ? FOR UPDATE',
+                `SELECT booking_id, status, lock_expires_at FROM bookings
+                 WHERE court_id = ? AND booking_date = ? AND slot_id = ? AND status IN ('pending', 'confirmed') FOR UPDATE`,
                 [court_id, booking_date, slot_id]
             );
 
@@ -584,11 +607,17 @@ const updateBookingDetails = async (req, res) => {
 
     try {
         await withTransaction(async (connection) => {
-            const [result] = await connection.query(
+            // amount_charged is 0 (covered by membership) for every member/
+            // coach booking — only a guest booking ever carries a real fee,
+            // so only a guest booking's fee can be corrected here.
+            const [[booking]] = await connection.query('SELECT booking_type FROM bookings WHERE booking_id = ? FOR UPDATE', [id]);
+            if (!booking) notFound('Booking not found.');
+            if (booking.booking_type !== 'guest') badRequest('Only a guest booking has a fee that can be edited.');
+
+            await connection.query(
                 'UPDATE bookings SET amount_charged = ? WHERE booking_id = ?',
                 [amount_charged, id]
             );
-            if (result.affectedRows === 0) notFound('Booking not found.');
 
             await connection.query(
                 `UPDATE payments SET amount = ?${note !== undefined ? ', notes = ?' : ''} WHERE booking_id = ? AND payment_type = 'booking_fee'`,

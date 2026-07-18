@@ -34,4 +34,4 @@ const fetchTodayForecast = async () => {
     return data;
 };
 
-module.exports = { fetchTodayForecast };
+module.exports = { fetchTodayForecast, SRI_LANKA_OFFSET_MS };

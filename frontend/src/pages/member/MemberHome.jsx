@@ -89,7 +89,12 @@ const MemberHome = () => {
           trend={nextBooking ? `${nextBooking.booking_date} • ${nextBooking.start_time?.slice(0, 5)}` : 'Book a slot'}
           icon={Calendar}
         />
-        <StatCard label="Club Notifications" value="03" trend="New Update" icon={Bell} />
+        <StatCard
+          label="Club Announcements"
+          value={String(announcements.length)}
+          trend={announcements.length ? 'Posted recently' : 'Nothing new'}
+          icon={Bell}
+        />
         <StatCard
           label="Hours on Court"
           value={`${courtStats.totalHours}h`}

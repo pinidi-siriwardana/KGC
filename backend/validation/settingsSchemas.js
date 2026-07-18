@@ -34,6 +34,18 @@ const updateSettingsSchema = z.record(z.string(), z.union([z.string(), z.number(
                 ctx.addIssue({ code: 'custom', message: `${key} must be a valid http(s) URL.` });
             }
         }
+    })
+    // Normalize each fee key to its actual numeric value (e.g. '' -> 0,
+    // '150' -> 150) — otherwise a cleared fee input passes the check above
+    // (Number('') === 0, which is a valid non-negative number) but the
+    // controller would still store the raw '' string in club_settings
+    // instead of '0'.
+    .transform((obj) => {
+        const out = { ...obj };
+        for (const key of NUMERIC_FEE_KEYS) {
+            if (out[key] !== undefined) out[key] = Number(out[key]);
+        }
+        return out;
     });
 
 module.exports = { updateSettingsSchema };
