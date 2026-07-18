@@ -68,8 +68,9 @@ HR-style directory for people who aren't members or coaches. Admins get a linked
 | `staff_type` | `enum('admin','guard','other')` | default `other` |
 | `position` | `varchar(100)` | free text |
 | `status` | `enum('active','inactive','suspended')` | |
-| `is_deleted` | `tinyint(1)` | soft-delete |
 | `created_at` | `timestamp` | |
+
+There is no delete for staff (or any admin directory in this app — see the note on `courts.status` and the API doc) — `status` is the only way to deactivate one. `is_deleted` existed briefly for soft-delete but was retired once delete was removed entirely; `backend/utils/schemaBootstrap.js`'s `retireStaffSoftDelete()` purges anything a prior soft-delete had already marked gone, then drops the column.
 
 ### `guests`
 Walk-in / non-member court users. No login at all.
@@ -79,7 +80,7 @@ Walk-in / non-member court users. No login at all.
 | `guest_id` | `int` PK | |
 | `full_name`, `phone` | | **not unique** — repeat guests are looked up and reused by phone at the application layer, not enforced by a DB constraint |
 | `email` | `varchar(100)` | nullable |
-| `is_deleted` | `tinyint(1)` | soft-delete (bookings reference guests, so hard-delete would break FK history) |
+| `status` | `enum('active','inactive')` | replaces the old `is_deleted` soft-delete flag — no delete anywhere in the admin dashboard, `status` is the only way to deactivate a guest. `active` is the only state a guest can be booked/matched against (`bookingController.js`'s guest lookups all filter `status = 'active'`). |
 | `created_at` | `timestamp` | |
 
 ---
@@ -119,10 +120,11 @@ A specific member's purchased term. A member can have several rows over time (re
 | `court_id` | `int` PK | |
 | `court_name` | `varchar(50)` | unique |
 | `court_type` | `varchar(30)` | default `Clay` |
-| `status` | `enum('available','maintenance')` | |
-| `is_active` | `tinyint(1)` | default `1` |
+| `is_active` | `tinyint(1)` | default `1` — the only whole-court availability flag now |
 | `photo_url` | `varchar(255)` | public court-gallery photo |
 | `created_at` | `timestamp` | |
+
+`courts.status` (`enum('available','maintenance')`) existed originally as a whole-court, indefinite-until-manually-reverted maintenance flag, toggled from the admin dashboard. It's been retired (`schemaBootstrap.js`'s `retireCourtStatus()` drops it) in favor of **time-boxed maintenance**: an admin schedules maintenance for a specific court + date + one or more `time_slots` by creating a `bookings` row with `booking_type = 'maintenance'` (see below) — it occupies exactly those slots via the same `unique_active_court_slot` mechanism a real booking uses, shows up in every booking grid as `maintenance` for just that window, and is undone the same way any booking is cancelled (`PATCH /api/bookings/:id`, `action: 'cancel'`). `is_active` is the only remaining whole-court switch, for a court taken out of service entirely — there's currently no admin UI to toggle it.
 
 ### `time_slots`
 Fixed daily 1-hour blocks (currently 16, 06:00–22:00), shared by every court.
@@ -142,9 +144,9 @@ The busiest table in the schema — every court reservation, from every surface 
 | `court_id` | `int` | FK → `courts` |
 | `slot_id` | `int` | FK → `time_slots` |
 | `booking_date` | `date` | |
-| `booking_type` | `enum('member','guest','coach')` | |
-| `amount_charged` | `decimal(10,2)` | historical price snapshot; `0` for member/coach bookings (covered by membership), non-zero for guest fees |
-| `member_id` / `guest_id` / `coach_id` | `int` | nullable, exactly one set per row |
+| `booking_type` | `enum('member','guest','coach','maintenance')` | `'maintenance'` is an admin-scheduled block on a court+date+slot (e.g. resurfacing), not a real reservation — see the note on `courts.status` above |
+| `amount_charged` | `decimal(10,2)` | historical price snapshot; `0` for member/coach/maintenance bookings, non-zero for guest fees |
+| `member_id` / `guest_id` / `coach_id` | `int` | nullable, exactly one set per row for `member`/`guest`/`coach`; **all three `NULL`** for `maintenance` |
 | `status` | `enum('pending','confirmed','rejected','cancelled')` | `pending` = an unpaid guest hold (5-min window) |
 | `lock_status` | `enum('locked','unlocked')` | admin-only flag — a `locked` booking can't be self-cancelled by the member/coach who made it |
 | `lock_expires_at` | `datetime` | nullable — when a guest's payment hold expires; `NULL` once paid/confirmed |
@@ -185,7 +187,7 @@ The pending-review queue: every receipt a member/coach/guest/applicant uploads l
 | `member_id` / `coach_id` | `int` | nullable, FK → respective table — set for a self-service submission (renewal, donation, fee settlement) |
 | `membership_type_id` | `int` | nullable, FK → `membership_types` — the plan being renewed |
 | `settles_payment_id` | `int` | nullable, FK → `payments` — set when this receipt is meant to pay off a specific already-recorded fee (e.g. a cancellation/no-show charge), rather than create a new one |
-| `payment_type` | `enum('registration','booking','membership_renewal','donation','tournament_fee','cancellation_fee','no_show_fee','other')` | |
+| `payment_type` | `enum('registration','booking','membership_renewal','donation','tournament_fee','cancellation_fee','no_show_fee','other')` | every value here reliably produces (or updates) a `payments` row on approval — `backend/controllers/paymentVerificationController.js`'s `reviewVerification` dispatches each to its own handler (`approveRegistration`/`approveMembershipRenewal`/`approveGuestBooking`/`approveFeeSettlement` when `settles_payment_id` is set, else `approveMemberPayment` for everything else) |
 | `receipt_file_url` | `varchar(255)` | path under `/uploads/slips/` |
 | `amount_declared` | `decimal(10,2)` | what the submitter claims they paid |
 | `status` | `enum('pending','approved','rejected')` | |

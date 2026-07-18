@@ -48,19 +48,21 @@ The one router with the most public surface — the guest-booking widget on the 
 | `GET` | `/guest-lookup` | — | Looks up an existing guest by phone/email so a returning guest can reuse their record. |
 | `POST` | `/guest-lock` | — | Holds a slot for 5 minutes for a guest (existing or new). Returns a `lock_token` that must be presented to pay. |
 | `POST` | `/guest-lock/:id/pay` | — | Multipart (`receipt` + `lock_token` fields). Submits the guest's payment slip for admin review. |
-| `GET` | `/` | member, coach, admin | List bookings — self-scoped for member/coach, unrestricted for admin; filterable by date/status/court. |
+| `GET` | `/` | member, coach, admin | List bookings — self-scoped for member/coach, unrestricted for admin; filterable by date/status/court/`booking_type`. |
 | `POST` | `/` | member, coach, admin | Create a booking. Self-service for member/coach (self as the booker); admin can book on behalf of any member/coach/guest. Enforces active-membership and past-slot rules server-side regardless of what the UI shows. |
-| `PATCH` | `/:id` | member, coach, admin | Status-transition endpoint — body `{ action }` where `action` is `cancel` \| `reject` \| `lock` \| `unlock` \| `restore`. Self-cancel is member/coach-only and self-scoped; the rest are admin-only. |
-| `PATCH` | `/:id/details` | **admin** | Corrects a booking's recorded fee amount after the fact; keeps a linked `payments` row in sync. |
+| `POST` | `/maintenance` | **admin** | Schedules a maintenance block on a court, covering one or more `time_slots` on a single date — body `{ court_id, booking_date, slot_ids: [...] }`. Inserts a `booking_type: 'maintenance'` row per slot in one transaction: if *any* requested slot already has a real booking, the whole request is rejected and nothing is created. Occupies the grid exactly like a real booking (shows as `maintenance`, not `booked`, to every booking surface). |
+| `PATCH` | `/:id` | member, coach, admin | Status-transition endpoint — body `{ action }` where `action` is `cancel` \| `reject` \| `lock` \| `unlock` \| `restore`. Self-cancel is member/coach-only and self-scoped; the rest are admin-only. Also how a scheduled maintenance block is undone (`action: 'cancel'` — no dedicated maintenance-cancel endpoint, it's just a booking like any other). |
+| `PATCH` | `/:id/details` | **admin** | Corrects a booking's recorded fee amount after the fact; keeps a linked `payments` row in sync. Guest bookings only — 400s if the target booking isn't `booking_type: 'guest'`. |
 
 ## Courts — `/api/courts`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/` | — | List bookable courts (incl. `photo_url`) — public court gallery + every booking grid. |
+| `GET` | `/` | — | List bookable courts (incl. `photo_url`, `is_active`) — public court gallery + every booking grid. |
 | `GET` | `/all` | **admin** | Same data, admin-facing listing. |
-| `PUT` | `/status/:id` | **admin** | Toggle a court `available`/`maintenance`. |
 | `POST` | `/:id/photo` | **admin** | Multipart (`photo`). Uploads/replaces a court's public gallery photo. |
+
+There's no whole-court status toggle anymore (`PUT /status/:id` was removed along with `courts.status`) — maintenance is scheduled per date+slot instead, via `POST /api/bookings/maintenance` above.
 
 ## Time slots — `/api/time-slots`
 
@@ -126,7 +128,8 @@ The one router with the most public surface — the guest-booking widget on the 
 | `POST` | `/add` | Create a login + matching profile row in one step (any role). |
 | `PUT` | `/update/:id` | Edit username/status/password. Role is immutable after creation. Blocked from disabling/demoting the last active admin. |
 | `POST` | `/:id/complete-profile` | Backfill a profile row for an account that was created without one. |
-| `DELETE` | `/delete/:id` | Delete the login (cascades to its profile row). Blocked for the last active admin. |
+
+No delete — `status: 'disabled'` (blocked from ever landing on the last active admin) is the only way to deactivate an account.
 
 ## Member Directory — `/api/members`
 
@@ -136,20 +139,22 @@ The one router with the most public surface — the guest-booking widget on the 
 |---|---|---|
 | `GET` | `/` | List members with current membership status. |
 | `POST` | `/add` | Create a member. Plan is **optional** — selecting one also records the payment. |
-| `PUT` | `/update/:id` | Edit profile fields; syncs `users.status`. |
+| `PUT` | `/update/:id` | Edit profile fields (including `status`); syncs `users.status`. |
 | `PUT` | `/:id/membership` | Assign or change a member's plan post-creation, syncing the linked payment. |
-| `DELETE` | `/delete/:id` | Delete. Returns a clean 409 (not a raw SQL error) if the member has booking/payment history — disable the account instead. |
+
+No delete — set `status` to `'inactive'`/`'suspended'` instead.
 
 ## Coach Directory — `/api/coaches`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/public` | — | Public roster for the home-page coach section (excludes email/phone). |
+| `GET` | `/public` | — | Public roster for the home-page coach section — active and `on-leave` coaches both show (on-leave gets a badge), only `inactive` is hidden. Includes `phone`, still excludes `email`. |
 | `GET` | `/` | **admin** | Full admin listing. |
 | `POST` | `/add` | **admin** | Create a coach. |
-| `PUT` | `/update/:id` | **admin** | Edit. |
+| `PUT` | `/update/:id` | **admin** | Edit (including `status`: `active`/`inactive`/`on-leave` — a different enum than members', no `suspended`). |
 | `POST` | `/:id/photo` | **admin** | Multipart (`photo`) — profile photo shown publicly. |
-| `DELETE` | `/delete/:id` | **admin** | Delete. Same booking/payment-history 409 guard as members. |
+
+No delete — set `status` to `'inactive'`/`'on-leave'` instead.
 
 ## Guest Directory — `/api/guests`
 
@@ -157,11 +162,11 @@ The one router with the most public surface — the guest-booking widget on the 
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/` | List guests (optionally filtered by search). |
+| `GET` | `/` | List guests (optionally filtered by search) — every guest, any status. |
 | `POST` | `/` | Manually create a guest record. |
-| `PUT` | `/:id` | Edit. Blocked on a soft-deleted guest. |
-| `DELETE` | `/:id` | Soft-delete. |
-| `PATCH` | `/:id/restore` | Undo a soft-delete. |
+| `PUT` | `/:id` | Edit (including `status`: `active`/`inactive`). |
+
+No delete or soft-delete/restore — `status` replaced `is_deleted` entirely; set it to `'inactive'` instead.
 
 ## Staff Directory — `/api/staff`
 
@@ -171,9 +176,9 @@ The one router with the most public surface — the guest-booking widget on the 
 |---|---|---|
 | `GET` | `/` | List staff (admins/guards/other). |
 | `POST` | `/` | Create a staff record. Admin-type records must go through Access Management instead of being edited here. |
-| `PUT` | `/:id` | Edit (non-admin staff only). |
-| `DELETE` | `/:id` | Soft-delete (non-admin staff only). |
-| `PATCH` | `/:id/restore` | Undo a soft-delete. |
+| `PUT` | `/:id` | Edit (non-admin staff only, including `status`). |
+
+No delete — set `status` to `'inactive'`/`'suspended'` instead.
 
 ## Payments & verification — `/api/payments`
 
@@ -182,14 +187,15 @@ The one router with the most public surface — the guest-booking widget on the 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | The settled payments ledger — filterable by type/date/search. |
+| `GET` | `/outstanding` | Every unpaid (`status: 'recorded'`) fee, grouped by member/coach — powers the "this person owes X" prompt on the Attendance screen. |
 | `POST` | `/manual` | Record a manual payment (new member/coach signup paid off-system, or a misc charge). |
 | `PATCH` | `/update/:id` | Correct an existing payment's amount/date/notes/status. |
 | `GET` | `/pending` | The receipt-review queue (status `pending`). |
-| `GET` | `/history` | Reviewed receipts (approved/rejected). |
-| `PATCH` | `/approve/:id` | Approve a receipt — cascades into the right side-effect (activate a registration, confirm a guest booking, extend a membership, settle a fee, etc.) depending on `payment_type`. |
-| `PATCH` | `/reject/:id` | Reject a receipt. |
-| `PATCH` | `/edit/:id` | Correct a verification's declared amount/remarks after the fact. |
-| `PATCH` | `/undo/:id` | Reverse an approve/reject back to pending. Blocked for an already-approved membership renewal or booking payment (no safe automatic reversal exists). |
+| `GET` | `/history` | Reviewed receipts (approved/rejected), capped at the 100 most recent. |
+| `PATCH` | `/approve/:id` | Approve a receipt — cascades into the right side-effect depending on `payment_type`/`settles_payment_id`: activates a registration, confirms a guest booking, extends a membership, settles an outstanding fee, or (every remaining type — donation/tournament fee/cancellation fee/no-show fee/other) simply records a new `payments` row. Every `payment_type` reliably produces or updates a ledger entry — none of them silently approve with no money recorded. |
+| `PATCH` | `/reject/:id` | Reject a receipt. For a `booking`-type receipt whose linked booking already resolved independently (e.g. its guest lock expired), this closes the receipt out cleanly instead of erroring — it only still blocks if the booking is already `confirmed` (a real conflict needing a refund decision, not a receipt review one). |
+| `PATCH` | `/edit/:id` | Correct a verification's remarks any time. The declared amount can only be edited while the receipt is still `pending` — once a decision's been made, `undo` first if the amount needs correcting. |
+| `PATCH` | `/undo/:id` | Reverse an approve/reject back to pending. Cleans up whatever the approval created: deletes the `payments` row it inserted, or reverts a settled fee back to `'recorded'` — so re-approving afterward can't create a duplicate ledger entry or get permanently stuck. Still blocked for an already-approved membership renewal or booking payment (no safe automatic reversal exists for those — the membership/confirmed-booking side effect can't be un-cascaded). |
 
 ## Revenue reports — `/api/revenue`
 
