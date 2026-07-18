@@ -1,7 +1,9 @@
 const { z } = require('zod');
 const { username, password, email, phone } = require('./common');
 
-const statusEnum = z.enum(['active', 'inactive', 'suspended']);
+// coaches.status is its own enum — 'on-leave', not 'suspended' (that's
+// members.status). See DB.md's note on this exact mismatch.
+const statusEnum = z.enum(['active', 'inactive', 'on-leave']);
 
 const createCoachSchema = z.object({
     username,

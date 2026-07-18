@@ -20,13 +20,16 @@ const getCoaches = async (req, res) => {
 
 // Public: the home page's coach section reads this directly instead of
 // hardcoded profiles, so it grows/shrinks with whatever admins actually
-// maintain in the Coach Directory. Only active coaches, and only the fields
-// meant to be shown to visitors — no email/phone/user_id.
+// maintain in the Coach Directory. Active and on-leave coaches both show
+// (on-leave still shows so visitors know they're on staff, just marked as
+// away) — only 'inactive' (no longer with the club) is hidden entirely.
+// Fields are still only what's meant for visitors — phone, but no email/
+// user_id.
 const getPublicCoaches = async (req, res) => {
     try {
         const [rows] = await pool.query(
-            `SELECT coach_id, full_name, specialization, experience_years, photo_url
-             FROM coaches WHERE status = 'active' ORDER BY created_at ASC`
+            `SELECT coach_id, full_name, phone, specialization, experience_years, photo_url, status
+             FROM coaches WHERE status IN ('active', 'on-leave') ORDER BY created_at ASC`
         );
         res.json({ data: rows });
     } catch (err) {

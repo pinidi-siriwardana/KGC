@@ -54,6 +54,8 @@ const CoachSection = () => {
                   name: coach.full_name,
                   experience: `${coach.experience_years || 0} Years Pro`,
                   specialty: coach.specialization || 'Court Specialist',
+                  phone: coach.phone,
+                  onLeave: coach.status === 'on-leave',
                   image: coach.photo_url ? `${API_URL}${coach.photo_url}` : null,
                 }}
               />

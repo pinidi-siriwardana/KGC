@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Award, CalendarCheck } from 'lucide-react';
+import { Award, CalendarCheck, Phone } from 'lucide-react';
 
 const initials = (name) => (name || '')
   .split(' ')
@@ -18,6 +18,12 @@ const CoachCard = ({ coach }) => {
     <div className="group relative">
       {/* Main Container with 3rem Radius */}
       <div className="relative h-[500px] rounded-club overflow-hidden shadow-2xl transition-all duration-700 group-hover:-translate-y-3 bg-obsidian">
+        {coach.onLeave && (
+          <div className="absolute top-6 left-8 z-10 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber text-obsidian text-[9px] font-black uppercase tracking-registry shadow-lg">
+            <span className="w-1.5 h-1.5 bg-obsidian rounded-full" />
+            On Leave
+          </div>
+        )}
         {coach.image && !imageBroken ? (
           <img
             src={coach.image}
@@ -49,7 +55,12 @@ const CoachCard = ({ coach }) => {
             {coach.specialty}
           </p>
 
-
+          {coach.phone && (
+            <a href={`tel:${coach.phone}`} className="flex items-center gap-2 text-white/70 hover:text-amber text-xs font-bold transition-colors w-fit">
+              <Phone size={13} />
+              {coach.phone}
+            </a>
+          )}
         </div>
       </div>
 
