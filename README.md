@@ -86,7 +86,19 @@ Open the printed local URL (Vite's default is `http://localhost:5173`).
 
 ### 4. First login
 
-There's no seeded admin account — the very first account has to come from the database directly (insert a `users` row with `role='admin'`, `status='active'`, and a bcrypt hash for the password), or by promoting a registration through the pending queue once one exists. After that, every other account (member, coach, more admins, staff) can be created from the Access Management screen.
+`schema.sql` seeds no accounts, so nobody can log in until the first admin is created by hand:
+
+```bash
+cd backend
+node -e "require('bcryptjs').hash('YourPassword123!', 10).then(console.log)"
+```
+
+```sql
+INSERT INTO users (username, password_hash, role, status)
+VALUES ('admin', '<hash printed above>', 'admin', 'active');
+```
+
+Then log in normally through the frontend's Login page (or `POST /api/auth/login`) with that username/password. The public Register form isn't a shortcut for this first account — it only creates a row in `registration_requests` awaiting *admin* approval, and there's no admin yet to approve it. Every subsequent account (member, coach, more admins, staff), including approving that registration pipeline, can be created from the Access Management screen once this first admin is in.
 
 ## Scripts
 
